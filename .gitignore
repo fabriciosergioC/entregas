@@ -1,0 +1,24 @@
+# Build
+dist/
+.next/
+
+# Dependências
+node_modules/
+
+# IDE
+.vscode/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build scripts (não necessário no repo)
+pre-deploy-check.bat
+pre-deploy-check.sh
