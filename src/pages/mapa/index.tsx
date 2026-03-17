@@ -11,6 +11,11 @@ export default function Mapa() {
   const [pedidoAtivo, setPedidoAtivo] = useState<Pedido | null>(null);
 
   useEffect(() => {
+    // Garantir que está rodando no cliente (browser)
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     // Verificar se está logado
     const dadosEntregador = localStorage.getItem('entregador');
     if (!dadosEntregador) {

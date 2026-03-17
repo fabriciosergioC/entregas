@@ -31,6 +31,11 @@ export default function Pedidos() {
   }, [pedidosDisponiveis, meusPedidos, tabAtiva]);
 
   useEffect(() => {
+    // Garantir que está rodando no cliente (browser)
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     // Verificar se está logado
     const dadosEntregador = localStorage.getItem('entregador');
     if (!dadosEntregador) {
