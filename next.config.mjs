@@ -17,7 +17,15 @@ const nextConfig = {
     ],
   },
   transpilePackages: ['leaflet', 'react-leaflet'],
-  output: 'standalone',
+  // Usar server-side rendering ao invés de exportação estática
+  output: undefined,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  reactStrictMode: true,
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

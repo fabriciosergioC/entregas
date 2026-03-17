@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { api, Pedido } from '@/services/api';
+import '@/app/globals.css';
 
 const MapaEntrega = lazy(() => import('@/components/mapaEntrega/MapaEntrega'));
 

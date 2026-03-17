@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import '@/app/globals.css';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -69,10 +70,25 @@ export default function Estabelecimento() {
   const carregarPedidos = async () => {
     try {
       const response = await fetch(`${API_URL}/pedidos`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Erro na API:', response.status, errorData);
+        return;
+      }
+      
       const data = await response.json();
-      setPedidos(data.reverse()); // Mais recentes primeiro
+      
+      // Garantir que data é um array
+      if (Array.isArray(data)) {
+        setPedidos([...data].reverse()); // Mais recentes primeiro
+      } else {
+        console.error('Dados não são um array:', data);
+        setPedidos([]);
+      }
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
+      setPedidos([]);
     }
   };
 

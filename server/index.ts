@@ -1,6 +1,6 @@
 /**
  * Servidor WebSocket com Socket.IO + Supabase
- * 
+ *
  * Este servidor gerencia:
  * - Conexões WebSocket em tempo real
  * - Eventos de localização de entregadores
@@ -8,6 +8,7 @@
  * - Integração com Supabase para persistência
  */
 
+import 'dotenv/config';
 import http from 'http';
 import { Server } from 'socket.io';
 import { createClient } from '@supabase/supabase-js';
@@ -23,8 +24,36 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+// Validar variáveis de ambiente
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('❌ ERRO: Variáveis de ambiente do Supabase não configuradas!');
+  console.error('Verifique o arquivo .env e preencha:');
+  console.error('  - NEXT_PUBLIC_SUPABASE_URL');
+  console.error('  - SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
+
 // Criar cliente Supabase
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+});
+
+// Testar conexão ao iniciar
+let supabaseConectado = false;
+supabase.from('pedidos').select('count').limit(1).then(({ error }) => {
+  if (error) {
+    console.error('❌ Erro ao conectar no Supabase:', error.message);
+    console.error('Verifique suas chaves no arquivo .env');
+  } else {
+    console.log('✅ Supabase conectado com sucesso!');
+    supabaseConectado = true;
+  }
+}).catch(err => {
+  console.error('❌ Erro crítico na conexão:', err.message);
+});
 
 // =============================================
 // SERVIDOR HTTP + SOCKET.IO
@@ -44,7 +73,34 @@ const server = http.createServer((req, res) => {
       timestamp: new Date().toISOString(),
       socketsConectados: io.engine.clientsCount,
       ambiente: NODE_ENV,
+      supabase: supabaseConectado ? '✅ Conectado' : '❌ Não conectado',
+      url: supabaseUrl ? '✅ Configurada' : '❌ Não configurada',
     }));
+    return;
+  }
+
+  // Health check detalhado
+  if (req.url === '/health/detailed') {
+    supabase.from('pedidos').select('count').limit(1).then(({ error, count }) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        socketsConectados: io.engine.clientsCount,
+        ambiente: NODE_ENV,
+        supabase: {
+          conectado: !error,
+          erro: error ? error.message : null,
+          pedidosCount: count,
+        },
+        configuracoes: {
+          urlConfigurada: !!supabaseUrl,
+          chaveServiceConfigurada: !!supabaseServiceKey,
+          porta: PORT,
+          corsOrigin: corsOrigin,
+        },
+      }));
+    });
     return;
   }
 
@@ -56,6 +112,87 @@ const server = http.createServer((req, res) => {
         total: sockets.length,
         clientsCount: io.engine.clientsCount,
       }));
+    });
+    return;
+  }
+
+  // =============================================
+  // API: PEDIDOS (GET /pedidos)
+  // =============================================
+  if (req.url === '/pedidos' && req.method === 'GET') {
+    console.log('📋 Buscando pedidos no Supabase...');
+    console.log('🔑 Supabase URL:', supabaseUrl ? '✅ Configurada' : '❌ Não configurada');
+    
+    supabase
+      .from('pedidos')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('❌ Erro ao buscar pedidos:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message, details: error }));
+        } else {
+          console.log('✅ Pedidos encontrados:', data?.length || 0);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(data || []));
+        }
+      })
+      .catch(err => {
+        console.error('❌ Erro na conexão:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+    return;
+  }
+
+  // =============================================
+  // API: CRIAR PEDIDO (POST /pedidos)
+  // =============================================
+  if (req.url === '/pedidos' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        const { cliente, endereco, itens } = JSON.parse(body);
+        
+        if (!cliente || !endereco || !itens) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Campos obrigatórios: cliente, endereco, itens' }));
+          return;
+        }
+
+        supabase
+          .from('pedidos')
+          .insert([{
+            cliente,
+            endereco,
+            itens,
+            status: 'pendente',
+          }])
+          .select()
+          .single()
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('Erro ao criar pedido:', error);
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: error.message }));
+            } else {
+              // Emitir evento via Socket.IO para todos os clientes
+              io.emit('novo-pedido', data);
+              console.log('📦 Novo pedido criado e notificado:', data.id);
+              
+              res.writeHead(201, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(data));
+            }
+          });
+      } catch (error) {
+        console.error('Erro ao parsear body:', error);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'JSON inválido' }));
+      }
     });
     return;
   }
@@ -245,7 +382,19 @@ io.on('connection', (socket) => {
 
 // Escutar mudanças no banco de dados e emitir via Socket.IO
 if (supabaseUrl && supabaseServiceKey) {
-  const channel = supabase
+  console.log('📡 Configurando Supabase Realtime...');
+  console.log('🔑 Supabase URL:', supabaseUrl);
+  
+  // Criar cliente Supabase com configuração explícita de Realtime
+  const supabaseRealtime = createClient(supabaseUrl, supabaseServiceKey, {
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  });
+  
+  const channel = supabaseRealtime
     .channel('pedidos-changes')
     .on(
       'postgres_changes',
@@ -255,7 +404,8 @@ if (supabaseUrl && supabaseServiceKey) {
         table: 'pedidos',
       },
       (payload) => {
-        console.log('📦 Novo pedido no banco:', payload.new);
+        console.log('📦 [REALTIME] Novo pedido no banco:', payload);
+        console.log('📦 [REALTIME] Emitindo para todos os clientes...');
         io.emit('novo-pedido', payload.new);
       }
     )
@@ -267,24 +417,38 @@ if (supabaseUrl && supabaseServiceKey) {
         table: 'pedidos',
       },
       (payload) => {
-        console.log('📝 Pedido atualizado no banco:', payload.new);
+        console.log('📝 [REALTIME] Pedido atualizado no banco:', payload);
         io.emit('pedido-atualizado', payload.new);
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log('📡 Supabase Realtime subscription status:', status);
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Supabase Realtime conectado e escutando mudanças');
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Erro no Supabase Realtime: CHANNEL_ERROR');
+        console.error('💡 Verifique se Realtime está habilitado no Supabase');
+        console.error('💡 Acesse: https://app.supabase.com → Database → Replication');
+      } else if (status === 'TIMED_OUT') {
+        console.error('❌ Timeout ao conectar no Supabase Realtime');
+        console.error('💡 Verifique sua conexão com a internet');
+      } else if (status === 'CLOSED') {
+        console.error('❌ Canal Realtime fechado');
+      }
+    });
 
-  console.log('✅ Supabase Realtime conectado');
+  console.log('✅ Canal Supabase Realtime criado');
 }
 
 // =============================================
 // INICIAR SERVIDOR
 // =============================================
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor WebSocket rodando em http://0.0.0.0:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Servidor WebSocket rodando em http://localhost:${PORT}`);
   console.log(`🌍 Ambiente: ${NODE_ENV}`);
   console.log(`📦 Supabase: ${supabaseUrl ? '✅' : '❌'}`);
-  
+
   if (NODE_ENV === 'development') {
     console.log(`📱 Acesse do celular em: http://192.168.1.3:${PORT}`);
   } else {

@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { api } from '@/services/api';
 import { conectarSocket } from '@/services/socket';
+import '@/app/globals.css';
 
 export default function Login() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function Login() {
   const [statusServidor, setStatusServidor] = useState<'online' | 'offline' | 'verificando'>('verificando');
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
   // Verificar saúde do servidor ao carregar
   const verificarServidor = async () => {
@@ -23,6 +25,7 @@ export default function Login() {
       const data = await response.json();
       console.log('✅ Servidor saudável:', data);
       setStatusServidor('online');
+      console.log('📊 Status Supabase:', data.supabase);
       return true;
     } catch (error) {
       console.error('❌ Servidor indisponível:', error);
@@ -83,7 +86,11 @@ export default function Login() {
       console.log('✅ Login realizado com sucesso:', entregador);
 
       // Salvar dados do entregador no localStorage
-      localStorage.setItem('entregador', JSON.stringify(entregador));
+      // A API retorna { data, error }, então precisamos salvar apenas os dados
+      const dadosEntregador = entregador.data || entregador;
+      localStorage.setItem('entregador', JSON.stringify(dadosEntregador));
+      
+      console.log('💾 Entregador salvo no localStorage:', dadosEntregador);
 
       // Conectar ao socket
       conectarSocket();
@@ -133,23 +140,34 @@ export default function Login() {
             <p className="text-gray-500 mt-2 text-sm">Faça login para começar a receber pedidos</p>
             
             {/* Status do Servidor */}
-            <div className="mt-3 flex items-center justify-center gap-2">
-              <span className={`w-3 h-3 rounded-full ${
-                statusServidor === 'online' ? 'bg-green-400' :
-                statusServidor === 'offline' ? 'bg-red-400' :
-                'bg-yellow-400 animate-pulse'
-              }`}></span>
-              <span className={`text-xs font-medium ${
-                statusServidor === 'online' ? 'text-green-600' :
-                statusServidor === 'offline' ? 'text-red-600' :
-                'text-yellow-600'
-              }`}>
-                {statusServidor === 'online' ? '✅ Servidor Online' :
-                 statusServidor === 'offline' ? '❌ Servidor Offline' :
-                 '🔄 Verificando...'}
-              </span>
+            <div className="mt-3 space-y-1">
+              <div className="flex items-center justify-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${
+                  statusServidor === 'online' ? 'bg-green-400' :
+                  statusServidor === 'offline' ? 'bg-red-400' :
+                  'bg-yellow-400 animate-pulse'
+                }`}></span>
+                <span className={`text-xs font-medium ${
+                  statusServidor === 'online' ? 'text-green-600' :
+                  statusServidor === 'offline' ? 'text-red-600' :
+                  'text-yellow-600'
+                }`}>
+                  {statusServidor === 'online' ? '✅ Servidor Online' :
+                   statusServidor === 'offline' ? '❌ Servidor Offline' :
+                   '🔄 Verificando...'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">Backend: {API_URL}</p>
+              {SUPABASE_URL && (
+                <p className="text-xs text-gray-400">Supabase: {SUPABASE_URL.substring(0, 30)}...</p>
+              )}
+              <button
+                onClick={verificarServidor}
+                className="text-xs text-blue-500 hover:text-blue-700 underline mt-1"
+              >
+                🔄 Recarregar status
+              </button>
             </div>
-            <p className="text-xs text-gray-400 mt-1">{API_URL}</p>
           </div>
 
           {/* Formulário */}

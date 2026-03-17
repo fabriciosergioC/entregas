@@ -80,16 +80,23 @@ export const api = {
 
   async aceitarPedido(id: string, entregadorId: string) {
     const resultado = await pedidosApi.aceitarPedido(id, entregadorId);
-    
+
     // Notificar via socket
     const socket = getSocket();
+    console.log('🔌 Socket status ao aceitar pedido:', socket?.connected ? '✅ Conectado' : '❌ Desconectado');
+    console.log('📡 Socket ID:', socket?.id);
+    
     if (socket?.connected && resultado.data) {
+      console.log('📡 Emitindo evento pedido-aceito-event...');
       socket.emit('pedido-aceito-event', {
         pedidoId: id,
         entregadorId,
       });
+      console.log('✅ Evento emitido com sucesso');
+    } else {
+      console.warn('⚠️ Socket não conectado, evento não emitido');
     }
-    
+
     return resultado;
   },
 
@@ -209,11 +216,4 @@ export type { Pedido, Entregador };
 export { supabase, entregadoresApi, pedidosApi, realtime };
 
 // Exportar Socket.IO diretamente para operações avançadas
-export {
-  conectarSocket,
-  aguardarConexao,
-  getSocket,
-  desconectarSocket,
-  eventosServidor,
-  eventosCliente,
-};
+export { conectarSocket, aguardarConexao, getSocket, eventosServidor, eventosCliente };

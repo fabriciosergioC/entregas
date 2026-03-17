@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { api, Pedido } from '@/services/api';
 import { conectarSocket, eventosServidor } from '@/services/socket';
 import PedidoCard from '@/components/pedidoCard/PedidoCard';
+import '@/app/globals.css';
 
 export default function Pedidos() {
   const router = useRouter();
@@ -12,6 +13,19 @@ export default function Pedidos() {
   const [meusPedidos, setMeusPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [tabAtiva, setTabAtiva] = useState<'disponiveis' | 'meus'>('disponiveis');
+  const socketRef = useRef<any>(null);
+
+  // Função auxiliar para pegar o ID do entregador do localStorage
+  const getEntregadorId = (): string | null => {
+    const dados = localStorage.getItem('entregador');
+    if (!dados) return null;
+    try {
+      const parsed = JSON.parse(dados);
+      return parsed?.id || null;
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     console.log('📊 Estado atual - Disponíveis:', pedidosDisponiveis.length, 'Meus:', meusPedidos.length, 'Tab:', tabAtiva);
@@ -28,8 +42,11 @@ export default function Pedidos() {
     const entregadorData = JSON.parse(dadosEntregador);
     setEntregador(entregadorData);
 
+    console.log('👤 Entregador logado:', entregadorData);
+
     // Conectar ao socket e configurar listeners
     const socket = conectarSocket();
+    socketRef.current = socket;
 
     // Entrar na sala do entregador
     socket.emit('entrar-sala-entregador', entregadorData.id);
@@ -39,7 +56,7 @@ export default function Pedidos() {
     // Ouvir novos pedidos - remover listener anterior para evitar duplicação
     socket.off(eventosServidor.NOVO_PEDIDO);
     socket.on(eventosServidor.NOVO_PEDIDO, (novoPedido: Pedido) => {
-      console.log('📦 Novo pedido recebido via WebSocket:', novoPedido);
+      console.log('📦 [SOCKET] Novo pedido recebido via WebSocket:', novoPedido);
       if (novoPedido.status === 'pendente') {
         setPedidosDisponiveis((prev) => {
           // Evitar duplicados
@@ -47,7 +64,7 @@ export default function Pedidos() {
             console.log('⚠️ Pedido já existe na lista, ignorando...');
             return prev;
           }
-          console.log('✅ Adicionando novo pedido à lista');
+          console.log('✅ [SOCKET] Adicionando novo pedido à lista');
           return [novoPedido, ...prev];
         });
         // Notificação visual
@@ -63,17 +80,24 @@ export default function Pedidos() {
     // Também ouvir pedido-aceito para atualizar a lista
     socket.off(eventosServidor.PEDIDO_ACEITO);
     socket.on(eventosServidor.PEDIDO_ACEITO, (pedidoAceito: Pedido) => {
-      console.log('✅ Pedido aceito:', pedidoAceito);
+      console.log('✅ [SOCKET] Pedido aceito:', pedidoAceito);
       setPedidosDisponiveis((prev) => prev.filter(p => p.id !== pedidoAceito.id));
       setMeusPedidos((prev) => [...prev, pedidoAceito]);
     });
 
     // Carregar pedidos iniciais
+    console.log('🔄 Carregando pedidos iniciais...');
     carregarPedidos(entregadorData.id);
 
     // Polling de backup para garantir que receba pedidos (caso WebSocket falhe)
     const intervaloPolling = setInterval(() => {
-      carregarPedidos(entregadorData.id);
+      const id = getEntregadorId();
+      console.log('🔄 Polling: Carregando pedidos...', { id });
+      if (id) {
+        carregarPedidos(id);
+      } else {
+        console.warn('⚠️ entregadorId é null, pulando polling');
+      }
     }, 3000);
 
     return () => {
@@ -85,15 +109,28 @@ export default function Pedidos() {
 
   const carregarPedidos = async (entregadorId: string) => {
     try {
-      const [disponiveis, meus] = await Promise.all([
-        api.listarPedidosDisponiveis().catch(() => []),
-        api.meusPedidos(entregadorId).catch(() => []),
+      console.log('🔄 Carregando pedidos...', { entregadorId });
+
+      if (!entregadorId) {
+        console.error('❌ entregadorId é undefined ou vazio!');
+        console.log('👤 Estado do entregador:', entregador);
+        return;
+      }
+
+      // Usar Supabase direto SEMPRE (mais confiável)
+      const [resultadoDisponiveis, resultadoMeus] = await Promise.all([
+        api.listarPedidosDisponiveis(),
+        api.meusPedidos(entregadorId),
       ]);
 
-      console.log('📋 Pedidos disponíveis:', disponiveis);
-      console.log('📋 Meus pedidos:', meus);
+      // Extrair os dados (a API retorna { data, error })
+      const disponiveis = resultadoDisponiveis.data || [];
+      const meus = resultadoMeus.data || [];
 
-      // Atualizar apenas se houver mudança para evitar re-render desnecessário
+      console.log('📋 Pedidos disponíveis (Supabase):', disponiveis.length, disponiveis);
+      console.log('📋 Meus pedidos (Supabase):', meus.length, meus);
+
+      // Atualizar lista de disponíveis
       setPedidosDisponiveis(prev => {
         const novosIds = new Set(disponiveis.map(p => p.id));
         // Remove pedidos que não estão mais disponíveis
@@ -101,43 +138,77 @@ export default function Pedidos() {
         // Adiciona novos pedidos
         const existentesIds = new Set(filtrados.map(p => p.id));
         const novos = disponiveis.filter(p => !existentesIds.has(p.id));
+        
+        if (novos.length > 0) {
+          console.log('✅ Adicionando', novos.length, 'novos pedidos');
+        }
+        if (prev.length !== disponiveis.length) {
+          console.log('📊 Mudança detectada:', prev.length, '->', disponiveis.length);
+        }
+        
         return [...novos, ...filtrados];
       });
       setMeusPedidos(meus);
     } catch (error) {
-      console.error('Erro ao carregar pedidos:', error);
+      console.error('❌ Erro ao carregar pedidos:', error);
+      setPedidosDisponiveis([]);
+      setMeusPedidos([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAceitarPedido = async (pedidoId: string) => {
-    if (!entregador) {
+    const entregadorId = getEntregadorId();
+    
+    if (!entregadorId) {
       console.error('❌ Entregador não encontrado');
+      console.log('👤 Estado atual do entregador:', entregador);
       return;
     }
 
-    console.log('✅ Aceitando pedido:', pedidoId, 'Entregador:', entregador.id);
+    console.log('✅ Aceitando pedido:', pedidoId, 'Entregador:', entregadorId);
 
     try {
-      const resultado = await api.aceitarPedido(pedidoId, entregador.id);
+      const resultado = await api.aceitarPedido(pedidoId, entregadorId);
       console.log('📝 Pedido aceito no backend:', resultado);
+
+      if (resultado.error) {
+        console.error('❌ Erro ao aceitar pedido:', resultado.error);
+        alert('Erro ao aceitar pedido: ' + resultado.error.message);
+        return;
+      }
+
+      const pedidoAtualizado = resultado.data;
+      console.log('📦 Pedido atualizado:', pedidoAtualizado);
 
       // Remover da lista de disponíveis imediatamente
       setPedidosDisponiveis((prev) => {
         const novaLista = prev.filter((p) => p.id !== pedidoId);
-        console.log('📋 Pedidos disponíveis após aceitar:', novaLista);
+        console.log('📋 Pedidos disponíveis após aceitar:', novaLista.length);
         return novaLista;
       });
-      
-      // Recarregar meus pedidos para garantir sincronia
-      console.log('🔄 Recarregando pedidos...');
-      await carregarPedidos(entregador.id);
+
+      // Adicionar na lista de meus pedidos imediatamente
+      setMeusPedidos((prev) => {
+        // Verificar se já não está na lista
+        const jaExiste = prev.find(p => p.id === pedidoId);
+        if (jaExiste) {
+          console.log('⚠️ Pedido já está em meus pedidos, atualizando...');
+          return prev.map(p => p.id === pedidoId ? pedidoAtualizado : p);
+        }
+        console.log('✅ Adicionando pedido aceito em meus pedidos');
+        return [pedidoAtualizado, ...prev];
+      });
+
+      // Recarregar pedidos para garantir sincronia
+      console.log('🔄 Recarregando pedidos para sincronizar...', { entregadorId });
+      await carregarPedidos(entregadorId);
 
       alert('Pedido aceito com sucesso!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao aceitar pedido:', error);
-      alert('Erro ao aceitar pedido');
+      alert('Erro ao aceitar pedido: ' + (error?.message || 'Erro desconhecido'));
     }
   };
 

@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "start:server": "npx ts-node server/index.ts",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:supabase": "npx tsx scripts/test-supabase.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
@@ -18,6 +19,7 @@
     "@types/cors": "^2.8.19",
     "@types/leaflet": "^1.9.21",
     "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
     "leaflet": "^1.9.4",
     "next": "14.2.35",
     "next-pwa": "^5.6.0",
@@ -40,6 +42,7 @@
     "eslint-config-next": "14.2.35",
     "nodemon": "^3.1.14",
     "postcss": "^8",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.4.1",
+    "tsx": "^4.19.2"
   }
 }

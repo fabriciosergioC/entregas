@@ -22,9 +22,7 @@ CREATE TABLE IF NOT EXISTS entregadores (
 
 -- Índice para busca por localização
 CREATE INDEX IF NOT EXISTS idx_entregadores_disponivel ON entregadores(disponivel);
-CREATE INDEX IF NOT EXISTS idx_entregadores_localizacao ON entregadores USING GIST (
-  ll_to_earth(localizacao_lat, localizacao_lng)
-);
+CREATE INDEX IF NOT EXISTS idx_entregadores_localizacao ON entregadores(localizacao_lat, localizacao_lng);
 
 -- =============================================
 -- TABELA: pedidos
