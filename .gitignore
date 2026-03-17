@@ -1,24 +1,69 @@
-# Build
+# =============================================
+# BUILD
+# =============================================
 dist/
 .next/
+out/
+build/
 
-# Dependências
+# =============================================
+# DEPENDÊNCIAS
+# =============================================
 node_modules/
 
-# IDE
+# =============================================
+# IDE / EDITOR
+# =============================================
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Logs
+# =============================================
+# LOGS
+# =============================================
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Environment
+# =============================================
+# ENVIRONMENT
+# =============================================
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
 
-# OS
+# =============================================
+# SISTEMA OPERACIONAL
+# =============================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Build scripts (não necessário no repo)
+# =============================================
+# TESTES / COBERTURA
+# =============================================
+coverage/
+.nyc_output/
+
+# =============================================
+# SUPABASE (CLI)
+# =============================================
+.supabase/
+
+# =============================================
+# SCRIPTS DE BUILD (não necessário no repo)
+# =============================================
 pre-deploy-check.bat
 pre-deploy-check.sh

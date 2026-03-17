@@ -1,6 +1,6 @@
 {
   "watch": ["server"],
   "ext": "ts,json",
-  "ignore": ["node_modules"],
+  "ignore": ["node_modules", "dist", ".next", "src"],
   "exec": "ts-node --esm server/index.ts"
 }
