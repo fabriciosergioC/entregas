@@ -1,6 +1,7 @@
 'use client';
 
 import { Pedido } from '@/services/api';
+import { escolherAppNavegacao } from '@/utils/navegacao';
 
 interface PedidoCardProps {
   pedido: Pedido;
@@ -68,7 +69,7 @@ export default function PedidoCard({
         <div className="flex items-center gap-2">
           <span className="text-gray-500">🕐</span>
           <p className="text-gray-600 text-sm">
-            {new Date(pedido.createdAt).toLocaleString('pt-BR')}
+            {new Date(pedido.created_at).toLocaleString('pt-BR')}
           </p>
         </div>
       </div>
@@ -86,10 +87,15 @@ export default function PedidoCard({
 
           {pedido.status === 'aceito' && onIniciar && (
             <button
-              onClick={onIniciar}
+              onClick={() => {
+                // Chama o app de navegação com o endereço do pedido
+                escolherAppNavegacao(pedido.endereco);
+                // Chama a função de iniciar entrega
+                onIniciar();
+              }}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
             >
-              Iniciar Entrega
+              🗺️ Iniciar Entrega
             </button>
           )}
 

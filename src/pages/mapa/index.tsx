@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { api, Pedido } from '@/services/api';
+import { escolherAppNavegacao } from '@/utils/navegacao';
 import '@/app/globals.css';
 
 const MapaEntrega = lazy(() => import('@/components/mapaEntrega/MapaEntrega'));
@@ -31,7 +32,8 @@ export default function Mapa() {
 
   const carregarPedidoAtivo = async (entregadorId: string) => {
     try {
-      const pedidos = await api.meusPedidos(entregadorId);
+      const resultado = await api.meusPedidos(entregadorId);
+      const pedidos = resultado.data || [];
       const ativo = pedidos.find((p) => p.status === 'aceito' || p.status === 'em_transito');
       if (ativo) {
         setPedidoAtivo(ativo);
@@ -61,42 +63,17 @@ export default function Mapa() {
       return;
     }
 
-    // Usar o endereço completo do pedido para navegação
-    const enderecoCompleto = encodeURIComponent(pedidoAtivo.endereco);
-    
-    // Se usuário já escolheu um app
+    // Usar a função utilitária para abrir o app de navegação
     if (app) {
-      if (app === 'maps') {
-        // Google Maps usando o endereço completo
-        const url = `https://www.google.com/maps/search/?api=1&query=${enderecoCompleto}`;
-        window.open(url, '_blank');
-        console.log('🗺️ Abrindo Google Maps com endereço:', pedidoAtivo.endereco);
-      } else if (app === 'waze') {
-        // Waze usando o endereço completo
-        const url = `https://waze.com/ul?q=${enderecoCompleto}&navigate=yes`;
-        window.open(url, '_blank');
-        console.log('🚗 Abrindo Waze com endereço:', pedidoAtivo.endereco);
-      }
-      return;
-    }
-
-    // Mostrar confirmação simples
-    const usarMaps = window.confirm(
-      'Escolha o app de navegação:\n\n' +
-      '✅ OK - Google Maps\n' +
-      '❌ Cancelar - Waze\n\n' +
-      'Endereço: ' + pedidoAtivo.endereco + '\n\n' +
-      'O app será aberto em uma nova aba.'
-    );
-
-    if (usarMaps) {
-      const url = `https://www.google.com/maps/search/?api=1&query=${enderecoCompleto}`;
+      // Se o usuário já escolheu um app específico
+      const url = app === 'maps' 
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pedidoAtivo.endereco)}`
+        : `https://waze.com/ul?q=${encodeURIComponent(pedidoAtivo.endereco)}&navigate=yes`;
       window.open(url, '_blank');
-      console.log('🗺️ Abrindo Google Maps');
+      console.log(`🗺️ Abrindo ${app === 'maps' ? 'Google Maps' : 'Waze'} com endereço:`, pedidoAtivo.endereco);
     } else {
-      const url = `https://waze.com/ul?q=${enderecoCompleto}&navigate=yes`;
-      window.open(url, '_blank');
-      console.log('🚗 Abrindo Waze');
+      // Usar a função utilitária que mostra o prompt de escolha
+      escolherAppNavegacao(pedidoAtivo.endereco);
     }
   };
 
@@ -195,6 +172,8 @@ export default function Mapa() {
                           await api.iniciarEntrega(pedidoAtivo!.id);
                           setPedidoAtivo({ ...pedidoAtivo, status: 'em_transito' });
                           alert('Entrega iniciada! Agora selecione o app de navegação.');
+                          // Abrir o app de navegação após iniciar a entrega
+                          escolherAppNavegacao(pedidoAtivo!.endereco);
                         } catch (error) {
                           console.error('Erro ao iniciar entrega:', error);
                         }
