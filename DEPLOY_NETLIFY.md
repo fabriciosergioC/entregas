@@ -116,7 +116,6 @@ git push origin main
 | Serviço | Exemplo |
 |---------|---------|
 | Frontend | `https://app-entregador.netlify.app` |
-| Backend | `https://app-entregador-backend.onrender.com` |
 | Supabase | `https://lhvfjaimrsrbvketayck.supabase.co` |
 
 ---
