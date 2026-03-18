@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import { api } from '@/services/api';
 import '@/app/globals.css';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 interface Pedido {
   id: string;
@@ -25,70 +24,36 @@ export default function Estabelecimento() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(false);
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroPedidos>('todos');
-  const [statusConexao, setStatusConexao] = useState<'online' | 'offline' | 'conectando'>('conectando');
-
-  // Verificar saúde do servidor
-  const verificarSaudeServidor = async () => {
-    try {
-      setStatusConexao('conectando');
-      const response = await fetch(`${API_URL}/health`);
-      if (!response.ok) {
-        throw new Error(`Status ${response.status}`);
-      }
-      const data = await response.json();
-      console.log('✅ Servidor saudável:', data);
-      setStatusConexao('online');
-      return true;
-    } catch (error) {
-      console.error('❌ Servidor indisponível:', error);
-      setStatusConexao('offline');
-      return false;
-    }
-  };
+  const [statusConexao, setStatusConexao] = useState<'online' | 'offline'>('online');
 
   // Carregar pedidos ao iniciar
   useEffect(() => {
-    // Verificar saúde do servidor ao carregar
-    verificarSaudeServidor().then(saudavel => {
-      if (!saudavel) {
-        alert('⚠️ Não foi possível conectar ao servidor backend!\n\nVerifique:\n1. O backend está rodando (npm run dev:backend)\n2. A URL está correta: ' + API_URL + '\n3. O firewall não está bloqueando a conexão');
-      }
-    });
-
     carregarPedidos();
 
     // Atualizar lista periodicamente
     const intervalo = setInterval(carregarPedidos, 5000);
-    // Verificar saúde do servidor periodicamente
-    const intervaloSaude = setInterval(verificarSaudeServidor, 10000);
     return () => {
       clearInterval(intervalo);
-      clearInterval(intervaloSaude);
     };
   }, []);
 
   const carregarPedidos = async () => {
     try {
-      const response = await fetch(`${API_URL}/pedidos`);
+      const resultado = await api.listarTodosPedidos();
+      const data = resultado.data || [];
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Erro na API:', response.status, errorData);
-        return;
-      }
-      
-      const data = await response.json();
-      
-      // Garantir que data é um array
       if (Array.isArray(data)) {
         setPedidos([...data].reverse()); // Mais recentes primeiro
+        setStatusConexao('online');
       } else {
         console.error('Dados não são um array:', data);
         setPedidos([]);
+        setStatusConexao('offline');
       }
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       setPedidos([]);
+      setStatusConexao('offline');
     }
   };
 
@@ -118,38 +83,26 @@ export default function Estabelecimento() {
     setLoading(true);
 
     try {
-      console.log('📝 Enviando pedido para:', `${API_URL}/pedidos`);
+      console.log('📝 Criando pedido no Supabase...');
       console.log('📦 Dados do pedido:', { cliente, endereco, itens: itens.split('\n').filter(item => item.trim()) });
 
-      const response = await fetch(`${API_URL}/pedidos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente,
-          endereco,
-          itens: itens.split('\n').filter(item => item.trim()),
-        }),
-      });
+      const resultado = await api.criarPedido(cliente, endereco, itens.split('\n').filter(item => item.trim()));
 
-      console.log('📊 Status da resposta:', response.status, response.statusText);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Pedido criado com sucesso:', data);
-        alert('✅ Pedido criado e enviado para os entregadores!');
-        setCliente('');
-        setEndereco('');
-        setItens('');
-        carregarPedidos();
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Erro na resposta:', response.status, errorData);
-        alert(`Erro ao criar pedido: ${response.status} - ${errorData.error || 'Erro desconhecido'}`);
+      if (resultado.error) {
+        console.error('❌ Erro ao criar pedido:', resultado.error);
+        alert('Erro ao criar pedido: ' + resultado.error.message);
+        return;
       }
+
+      console.log('✅ Pedido criado com sucesso:', resultado.data);
+      alert('✅ Pedido criado e enviado para os entregadores!');
+      setCliente('');
+      setEndereco('');
+      setItens('');
+      carregarPedidos();
     } catch (error) {
       console.error('❌ Erro ao criar pedido:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      alert(`Erro de conexão com o servidor: ${errorMessage}\n\nVerifique:\n1. O backend está rodando?\n2. A URL ${API_URL} está correta?\n3. O firewall está bloqueando?`);
+      alert('Erro ao criar pedido: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     } finally {
       setLoading(false);
     }
@@ -193,18 +146,13 @@ export default function Estabelecimento() {
             </div>
             <div className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded-full ${
-                statusConexao === 'online' ? 'bg-green-400' :
-                statusConexao === 'offline' ? 'bg-red-400' :
-                'bg-yellow-400 animate-pulse'
+                statusConexao === 'online' ? 'bg-green-400' : 'bg-red-400'
               }`}></span>
               <span className="text-xs">
-                {statusConexao === 'online' ? '✅ Online' :
-                 statusConexao === 'offline' ? '❌ Offline' :
-                 '🔄 Conectando...'}
+                {statusConexao === 'online' ? '✅ Online - Supabase' : '❌ Offline'}
               </span>
             </div>
           </div>
-          <p className="text-xs text-blue-200 mt-2">Backend: {API_URL}</p>
         </header>
 
         <main className="p-4 max-w-4xl mx-auto">
