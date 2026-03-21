@@ -11,9 +11,3 @@
 # Netlify Functions
 [functions]
   directory = "netlify/functions"
-
-# Variáveis de ambiente (configure também no painel da Netlify)
-[build.environment]
-  SMTP_HOST = "smtp.gmail.com"
-  SMTP_PORT = "587"
-  SMTP_FROM_EMAIL = "seu-email@gmail.com"
