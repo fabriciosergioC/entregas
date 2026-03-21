@@ -26,6 +26,7 @@ export default function CadastroEstabelecimento() {
   // Formatar telefone enquanto digita
   const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let valor = e.target.value.replace(/\D/g, '');
+    
     if (valor.length > 11) valor = valor.slice(0, 11);
 
     if (valor.length > 10) {
@@ -247,6 +248,7 @@ export default function CadastroEstabelecimento() {
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
                   placeholder="(00) 00000-0000"
                   required
+                  autoComplete="off"
                 />
               </div>
               <p className="text-xs text-gray-500 mt-1">
