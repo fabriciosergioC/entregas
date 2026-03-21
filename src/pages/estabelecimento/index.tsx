@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { api } from '@/services/api';
 import '@/app/globals.css';
 
@@ -26,6 +27,7 @@ interface Pedido {
 type FiltroPedidos = 'todos' | 'pendentes' | 'em_entrega' | 'entregues';
 
 export default function Estabelecimento() {
+  const router = useRouter();
   const [cliente, setCliente] = useState('');
   const [endereco, setEndereco] = useState('');
   const [itens, setItens] = useState('');
@@ -39,6 +41,19 @@ export default function Estabelecimento() {
   const [loading, setLoading] = useState(false);
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroPedidos>('todos');
   const [statusConexao, setStatusConexao] = useState<'online' | 'offline'>('online');
+  const [linkCopiado, setLinkCopiado] = useState<string | null>(null);
+  const [ultimoPedidoCriado, setUltimoPedidoCriado] = useState<string | null>(null);
+  const [usuarioLogado, setUsuarioLogado] = useState<{ id: string; email: string } | null>(null);
+
+  // Verificar se usuário está logado
+  useEffect(() => {
+    const user = localStorage.getItem('estabelecimento_user');
+    if (!user) {
+      router.push('/login-estabelecimento');
+      return;
+    }
+    setUsuarioLogado(JSON.parse(user));
+  }, []);
 
   // Formatar valor em moeda enquanto digita
   const handleValorPedidoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,6 +79,62 @@ export default function Estabelecimento() {
   const handleSalvarEnderecoEstabelecimento = (endereco: string) => {
     setEnderecoEstabelecimento(endereco);
     localStorage.setItem('endereco_estabelecimento', endereco);
+  };
+
+  // Gerar link de rastreamento
+  const gerarLinkRastreamento = (pedidoId: string) => {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/painel-cliente/${pedidoId}`;
+    }
+    return `/painel-cliente/${pedidoId}`;
+  };
+
+  // Copiar apenas o ID do pedido
+  const copiarIdPedido = async (pedidoId: string) => {
+    try {
+      await navigator.clipboard.writeText(pedidoId);
+      setLinkCopiado(pedidoId);
+      setTimeout(() => setLinkCopiado(null), 2000);
+      alert(`✅ ID do pedido copiado!\n\n${pedidoId}\n\nO cliente pode usar este ID para acompanhar o pedido.`);
+    } catch (error) {
+      console.error('Erro ao copiar ID:', error);
+      alert('Erro ao copiar ID. Tente novamente.');
+    }
+  };
+
+  // Copiar link de rastreamento
+  const copiarLinkRastreamento = async (pedidoId: string) => {
+    const link = gerarLinkRastreamento(pedidoId);
+    try {
+      await navigator.clipboard.writeText(link);
+      setLinkCopiado(pedidoId);
+      setTimeout(() => setLinkCopiado(null), 2000);
+      alert(`✅ Link de rastreamento copiado!\n\n${link}\n\nEnvie este link para o cliente acompanhar o pedido em tempo real.`);
+    } catch (error) {
+      console.error('Erro ao copiar link:', error);
+      alert('Erro ao copiar link. Tente novamente.');
+    }
+  };
+
+  // Compartilhar link de rastreamento
+  const compartilharLinkRastreamento = async (pedidoId: string, clienteNome: string) => {
+    const link = gerarLinkRastreamento(pedidoId);
+    const shareData = {
+      title: 'Acompanhar Pedido',
+      text: `Olá! Acompanhe seu pedido em tempo real:`,
+      url: link,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        console.error('Erro ao compartilhar:', error);
+        await copiarLinkRastreamento(pedidoId);
+      }
+    } else {
+      await copiarLinkRastreamento(pedidoId);
+    }
   };
 
   // Carregar pedidos ao iniciar
@@ -167,7 +238,15 @@ export default function Estabelecimento() {
       }
 
       console.log('✅ Pedido criado com sucesso:', resultado.data);
-      alert('✅ Pedido criado e enviado para os entregadores!');
+      
+      // Gerar link de rastreamento
+      const linkRastreamento = gerarLinkRastreamento(resultado.data.id);
+      
+      // Salvar ID do último pedido criado para mostrar o link
+      setUltimoPedidoCriado(resultado.data.id);
+      
+      alert(`✅ Pedido criado e enviado para os entregadores!\n\n🔗 Link de rastreamento: ${linkRastreamento}\n\nEnvie este link para o cliente acompanhar o pedido em tempo real.`);
+      
       setCliente('');
       setEndereco('');
       setItens('');
@@ -217,20 +296,25 @@ export default function Estabelecimento() {
       alert('⚠️ Nenhum entregador aceitou este pedido ainda!');
       return;
     }
-    
+
     try {
       // Liberar pedido no Supabase
       const resultado = await api.liberarPedidoParaEntregador(pedidoId);
-      
+
       if (resultado.error) {
         console.error('❌ Erro ao liberar pedido:', resultado.error);
         alert('Erro ao liberar pedido: ' + resultado.error.message);
         return;
       }
-      
+
       console.log('✅ Pedido liberado com sucesso:', resultado.data);
-      alert('✅ Pedido liberado para o entregador!\n\nAgora o entregador pode iniciar a entrega.');
       
+      // Copiar link de rastreamento automaticamente
+      const link = gerarLinkRastreamento(pedidoId);
+      await navigator.clipboard.writeText(link);
+      
+      alert(`✅ Pedido liberado para o entregador!\n\n🔗 Link de rastreamento copiado!\n\nEnvie para o cliente acompanhar: ${link}`);
+
       // Recarregar pedidos para atualizar status
       carregarPedidos();
     } catch (error) {
@@ -239,8 +323,22 @@ export default function Estabelecimento() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('estabelecimento_user');
+    router.push('/login-estabelecimento');
+  };
+
   return (
     <>
+      {!usuarioLogado ? (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin text-6xl mb-4">🔄</div>
+            <p className="text-gray-600">Verificando login...</p>
+          </div>
+        </div>
+      ) : (
+        <>
       <Head>
         <title>Painel do Estabelecimento</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -253,6 +351,9 @@ export default function Estabelecimento() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-xl font-bold">🏪 Painel do Estabelecimento</h1>
+              {usuarioLogado && (
+                <p className="text-xs text-blue-200">📧 {usuarioLogado.email}</p>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${
@@ -262,8 +363,8 @@ export default function Estabelecimento() {
                 {statusConexao === 'online' ? '✅ Online' : '❌ Offline'}
               </span>
               <button
-                onClick={() => window.location.href = '/'}
-                className="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center gap-2 text-sm"
+                onClick={handleLogout}
+                className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center gap-2 text-sm"
               >
                 🚪 Sair
               </button>
@@ -272,6 +373,48 @@ export default function Estabelecimento() {
         </header>
 
         <main className="p-4 max-w-4xl mx-auto">
+          {/* Banner do Último Pedido Criado */}
+          {ultimoPedidoCriado && (
+            <section className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 mb-6 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                    <span className="text-2xl">🎉</span> Pedido Criado com Sucesso!
+                  </h2>
+                  <p className="text-green-100 mb-3">
+                    Pedido #{ultimoPedidoCriado.slice(-8)}
+                  </p>
+                  <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
+                    <p className="text-xs font-medium text-green-50 mb-2">🔗 Link de Rastreamento:</p>
+                    <code className="block bg-white/30 rounded px-3 py-2 text-sm font-mono break-all mb-3">
+                      {gerarLinkRastreamento(ultimoPedidoCriado)}
+                    </code>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => copiarIdPedido(ultimoPedidoCriado)}
+                        className="flex-1 bg-white text-green-600 hover:bg-green-50 font-bold py-2 px-4 rounded-lg transition-colors text-sm"
+                      >
+                        {linkCopiado === ultimoPedidoCriado ? '✅ Copiado!' : '📋 Copiar ID'}
+                      </button>
+                      <button
+                        onClick={() => compartilharLinkRastreamento(ultimoPedidoCriado, '')}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm"
+                      >
+                        📤 Enviar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setUltimoPedidoCriado(null)}
+                  className="text-green-100 hover:text-white transition-colors"
+                >
+                  <span className="text-2xl">✕</span>
+                </button>
+              </div>
+            </section>
+          )}
+
           {/* Formulário de Novo Pedido */}
           <section className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -547,9 +690,37 @@ export default function Estabelecimento() {
                       </button>
                     )}
 
+                    {/* Link de Rastreamento - aparece em TODOS os pedidos */}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-xs font-medium text-blue-700 mb-2 text-center">
+                          🔗 ID para Rastreamento
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => copiarIdPedido(pedido.id)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            {linkCopiado === pedido.id ? '✅ Copiado!' : '📋 Copiar ID'}
+                          </button>
+                          <button
+                            onClick={() => compartilharLinkRastreamento(pedido.id, pedido.cliente)}
+                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            📤 Enviar
+                          </button>
+                        </div>
+                        <p className="text-xs text-blue-600 mt-2 text-center">
+                          Copie o ID e envie para o cliente acompanhar
+                        </p>
+                      </div>
+                    </div>
+
                     {pedido.liberado_pelo_estabelecimento && (
-                      <div className="text-center mt-2 text-sm text-green-600 font-medium">
-                        ✅ Entregador já foi notificado e pode iniciar a entrega
+                      <div className="space-y-2 mt-2">
+                        <div className="text-center text-sm text-green-600 font-medium bg-green-50 border border-green-200 rounded-lg p-2">
+                          ✅ Entregador já foi notificado e pode iniciar a entrega
+                        </div>
                       </div>
                     )}
 
@@ -563,6 +734,8 @@ export default function Estabelecimento() {
           </section>
         </main>
       </div>
+      </>
+      )}
     </>
   );
 }

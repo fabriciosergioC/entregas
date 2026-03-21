@@ -25,3 +25,19 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Leaflet Map Styles */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
+.leaflet-marker-icon {
+  background: transparent;
+  border: none;
+}
+
+.custom-marker {
+  background: transparent;
+  border: none;
+}
