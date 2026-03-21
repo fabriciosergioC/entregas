@@ -57,6 +57,20 @@ export default function CadastroEstabelecimento() {
     try {
       console.log('📝 Criando conta...', { email, nomeEstabelecimento });
 
+      // Verificar se já existe cadastro (ativo ou pendente)
+      const { data: existente } = await supabase
+        .from('estabelecimentos')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .single();
+
+      if (existente) {
+        if (!existente.ativo) {
+          throw new Error('Cadastro pendente de confirmação. Verifique seu email para o código de confirmação.');
+        }
+        throw new Error('Este email já está cadastrado e confirmado.');
+      }
+
       // Gerar código de verificação de 6 dígitos
       const codigoVerificacao = Math.floor(100000 + Math.random() * 900000).toString();
       

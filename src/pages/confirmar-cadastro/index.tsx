@@ -32,6 +32,26 @@ export default function ConfirmarCadastro() {
     }
   }, [searchParams, router]);
 
+  // Verificar se já foi confirmado
+  useEffect(() => {
+    const verificarConfirmacao = async () => {
+      if (!email) return;
+      
+      const { data } = await supabase
+        .from('estabelecimentos')
+        .select('ativo')
+        .eq('email', email.toLowerCase())
+        .single();
+      
+      if (data?.ativo === true) {
+        setSucesso('✅ Email já confirmado! Redirecionando para login...');
+        setTimeout(() => router.push('/login-estabelecimento'), 2000);
+      }
+    };
+    
+    verificarConfirmacao();
+  }, [email]);
+
   // Timer de expiração
   useEffect(() => {
     const timer = setInterval(() => {
