@@ -12,7 +12,6 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function CadastroEstabelecimento() {
   const router = useRouter();
   const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('');
@@ -57,11 +56,8 @@ export default function CadastroEstabelecimento() {
   const validarTelefone = (tel: string) => {
     // Remove todos os caracteres não numéricos
     const numeros = tel.replace(/\D/g, '');
-    console.log('📱 Validando telefone:', tel, '→', numeros, '→ Length:', numeros.length);
     // Valida se tem 10 ou 11 dígitos (com ou sem formatação)
-    const valido = (numeros.length === 10 || numeros.length === 11);
-    console.log('✅ Telefone válido:', valido);
-    return valido;
+    return (numeros.length === 10 || numeros.length === 11);
   };
 
   const handleCadastro = async (e: React.FormEvent) => {
@@ -70,15 +66,9 @@ export default function CadastroEstabelecimento() {
     setErro('');
     setSucesso('');
 
-    console.log('📝 Iniciando cadastro...');
-    console.log('📱 telefoneFormatado:', telefoneFormatado);
-    console.log('📱 telefone:', telefone);
-
     // Formatar telefone antes de validar
     let valor = telefoneFormatado.replace(/\D/g, '');
     let telefoneNumeros = '';
-    
-    console.log('📱 valor (somente numeros):', valor);
     
     if (valor.length > 0) {
       if (valor.length > 10) {
@@ -94,19 +84,15 @@ export default function CadastroEstabelecimento() {
     } else {
       telefoneNumeros = telefone;
     }
-    
-    console.log('📱 telefoneNumeros para validação:', telefoneNumeros);
 
     // Validações
-    if (!nome || !email || !senha || !nomeEstabelecimento || !telefoneNumeros) {
-      console.log('❌ Campos vazios');
+    if (!nome || !senha || !nomeEstabelecimento || !telefoneNumeros) {
       setErro('Por favor, preencha todos os campos obrigatórios');
       setLoading(false);
       return;
     }
 
     if (!validarTelefone(telefoneNumeros)) {
-      console.log('❌ Telefone inválido');
       setErro('Por favor, informe um telefone/celular válido (com DDD)');
       setLoading(false);
       return;
@@ -125,11 +111,13 @@ export default function CadastroEstabelecimento() {
     }
 
     try {
-      console.log('📝 Criando conta...', { email, nomeEstabelecimento });
+      console.log('📝 Criando conta...', { telefone: telefoneNumeros, nomeEstabelecimento });
 
-      // Criar usuário com Supabase Auth
+      // Criar usuário com Supabase Auth usando telefone como email
+      const emailFormatado = `${telefoneNumeros}@appentregas.com`;
+      
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: emailFormatado,
         password: senha,
         options: {
           data: {
@@ -147,7 +135,7 @@ export default function CadastroEstabelecimento() {
 
       console.log('✅ Conta criada com sucesso:', data.user);
 
-      setSucesso('✅ Cadastro realizado com sucesso! Verifique seu email para confirmar a conta.');
+      setSucesso('✅ Cadastro realizado com sucesso! Redirecionando...');
 
       // Aguardar 3 segundos e redirecionar para login
       setTimeout(() => {
@@ -239,24 +227,6 @@ export default function CadastroEstabelecimento() {
                   onChange={(e) => setNome(e.target.value)}
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
                   placeholder="Seu nome completo"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="email">
-                Email *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📧</span>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="seu@email.com"
                   required
                 />
               </div>
