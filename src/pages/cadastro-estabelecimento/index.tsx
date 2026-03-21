@@ -70,6 +70,8 @@ export default function CadastroEstabelecimento() {
 
     // Formatar telefone antes de validar
     let valor = telefoneFormatado.replace(/\D/g, '');
+    let telefoneNumeros = '';
+    
     if (valor.length > 0) {
       if (valor.length > 10) {
         valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7)}`;
@@ -78,16 +80,21 @@ export default function CadastroEstabelecimento() {
       }
       setTelefoneFormatado(valor);
       setTelefone(valor.replace(/\D/g, ''));
+      
+      // Usa a variável local para validação imediata
+      telefoneNumeros = valor.replace(/\D/g, '');
+    } else {
+      telefoneNumeros = telefone;
     }
 
     // Validações
-    if (!nome || !email || !senha || !nomeEstabelecimento || !telefone) {
+    if (!nome || !email || !senha || !nomeEstabelecimento || !telefoneNumeros) {
       setErro('Por favor, preencha todos os campos obrigatórios');
       setLoading(false);
       return;
     }
 
-    if (!validarTelefone(telefone)) {
+    if (!validarTelefone(telefoneNumeros)) {
       setErro('Por favor, informe um telefone/celular válido (com DDD)');
       setLoading(false);
       return;
@@ -117,7 +124,7 @@ export default function CadastroEstabelecimento() {
             nome: nome,
             nome_estabelecimento: nomeEstabelecimento,
             cnpj: cnpj,
-            telefone: telefone,
+            telefone: telefoneNumeros,
           },
         },
       });
