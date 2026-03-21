@@ -17,9 +17,35 @@ export default function CadastroEstabelecimento() {
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('');
   const [cnpj, setCnpj] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [telefoneFormatado, setTelefoneFormatado] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
+
+  // Formatar telefone enquanto digita
+  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let valor = e.target.value.replace(/\D/g, '');
+    if (valor.length > 11) valor = valor.slice(0, 11);
+
+    if (valor.length > 10) {
+      valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7)}`;
+    } else if (valor.length > 6) {
+      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}-${valor.slice(6)}`;
+    } else if (valor.length > 2) {
+      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}`;
+    } else if (valor.length > 0) {
+      valor = `(${valor.slice(0, 2)}`;
+    }
+
+    setTelefoneFormatado(valor);
+    setTelefone(valor.replace(/\D/g, ''));
+  };
+
+  // Validar telefone brasileiro
+  const validarTelefone = (tel: string) => {
+    return tel.length === 11 && tel.startsWith('9');
+  };
 
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +54,14 @@ export default function CadastroEstabelecimento() {
     setSucesso('');
 
     // Validações
-    if (!nome || !email || !senha || !nomeEstabelecimento) {
+    if (!nome || !email || !senha || !nomeEstabelecimento || !telefone) {
       setErro('Por favor, preencha todos os campos obrigatórios');
+      setLoading(false);
+      return;
+    }
+
+    if (!validarTelefone(telefone)) {
+      setErro('Por favor, informe um telefone/celular válido (com DDD)');
       setLoading(false);
       return;
     }
@@ -58,6 +90,7 @@ export default function CadastroEstabelecimento() {
             nome: nome,
             nome_estabelecimento: nomeEstabelecimento,
             cnpj: cnpj,
+            telefone: telefone,
           },
         },
       });
@@ -198,6 +231,27 @@ export default function CadastroEstabelecimento() {
                   placeholder="00.000.000/0000-00"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-700 font-semibold text-sm" htmlFor="telefone">
+                WhatsApp / Celular *
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📱</span>
+                <input
+                  id="telefone"
+                  type="tel"
+                  value={telefoneFormatado}
+                  onChange={handleTelefoneChange}
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
+                  placeholder="(00) 00000-0000"
+                  required
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                🔒 Usado para verificação e contato (não enviamos spam)
+              </p>
             </div>
 
             <div className="space-y-1">

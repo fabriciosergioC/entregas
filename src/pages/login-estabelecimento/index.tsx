@@ -56,6 +56,7 @@ export default function LoginEstabelecimento() {
 
       // Buscar dados adicionais do usuário
       const nomeEstabelecimento = data.user.user_metadata?.nome_estabelecimento || 'Estabelecimento';
+      const telefone = data.user.user_metadata?.telefone || '';
 
       // Salvar dados do usuário no localStorage
       localStorage.setItem('estabelecimento_user', JSON.stringify({
@@ -63,6 +64,7 @@ export default function LoginEstabelecimento() {
         email: data.user.email,
         token: data.session?.access_token,
         nome_estabelecimento: nomeEstabelecimento,
+        telefone: telefone,
       }));
 
       // Salvar nome do estabelecimento separadamente para o painel
