@@ -11,31 +11,11 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function LoginEstabelecimento() {
   const router = useRouter();
-  const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [statusSupabase, setStatusSupabase] = useState<'online' | 'offline'>('online');
-  const [telefoneFormatado, setTelefoneFormatado] = useState('');
-
-  // Formatar telefone enquanto digita
-  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let valor = e.target.value.replace(/\D/g, '');
-    if (valor.length > 11) valor = valor.slice(0, 11);
-
-    if (valor.length > 10) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7)}`;
-    } else if (valor.length > 6) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}-${valor.slice(6)}`;
-    } else if (valor.length > 2) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}`;
-    } else if (valor.length > 0) {
-      valor = `(${valor.slice(0, 2)}`;
-    }
-
-    setTelefoneFormatado(valor);
-    setTelefone(valor.replace(/\D/g, ''));
-  };
 
   // Verificar se Supabase está configurado
   useEffect(() => {
@@ -52,34 +32,32 @@ export default function LoginEstabelecimento() {
     setLoading(true);
     setErro('');
 
-    if (!telefone || !senha) {
-      setErro('Por favor, preencha telefone e senha');
+    if (!email || !senha) {
+      setErro('Por favor, preencha email e senha');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('📝 Tentando login...', { telefone });
+      console.log('📝 Tentando login...', { email });
 
       // Buscar estabelecimento na tabela estabelecimentos
-      const emailFormatado = `${telefone}@appentregas.com`;
-      
       const { data: estabelecimento, error: buscaErro } = await supabase
         .from('estabelecimentos')
         .select('*')
-        .eq('email', emailFormatado)
+        .eq('email', email.toLowerCase())
         .eq('ativo', true)
         .single();
 
       if (buscaErro || !estabelecimento) {
-        throw new Error('Telefone ou senha inválidos');
+        throw new Error('Email ou senha inválidos');
       }
 
       // Verificar senha (comparar hash)
       const senhaDecodificada = atob(estabelecimento.senha_hash);
       
       if (senhaDecodificada !== senha) {
-        throw new Error('Telefone ou senha inválidos');
+        throw new Error('Email ou senha inválidos');
       }
 
       console.log('✅ Login realizado com sucesso:', estabelecimento);
@@ -99,7 +77,7 @@ export default function LoginEstabelecimento() {
 
       console.log('💾 Dados salvos:', { 
         nome_estabelecimento: estabelecimento.nome_estabelecimento,
-        telefone: estabelecimento.telefone 
+        email: estabelecimento.email 
       });
 
       // Redirecionar para página do estabelecimento
@@ -110,8 +88,8 @@ export default function LoginEstabelecimento() {
       let mensagemErro = 'Erro ao fazer login.';
 
       if (error instanceof Error) {
-        if (error.message.includes('Telefone ou senha inválidos')) {
-          mensagemErro = 'Telefone ou senha inválidos';
+        if (error.message.includes('Email ou senha inválidos')) {
+          mensagemErro = 'Email ou senha inválidos';
         } else {
           mensagemErro = `Erro: ${error.message}`;
         }
@@ -165,18 +143,18 @@ export default function LoginEstabelecimento() {
             )}
 
             <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="telefone">
-                Telefone / WhatsApp
+              <label className="block text-gray-700 font-semibold text-sm" htmlFor="email">
+                Email
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📱</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📧</span>
                 <input
-                  id="telefone"
-                  type="tel"
-                  value={telefoneFormatado}
-                  onChange={handleTelefoneChange}
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 bg-gray-50"
-                  placeholder="(00) 00000-0000"
+                  placeholder="seu@email.com"
                   required
                 />
               </div>
@@ -237,7 +215,7 @@ export default function LoginEstabelecimento() {
                 </button>
               </p>
               <p className="text-gray-500 text-xs mt-2">
-                💡 Use seu WhatsApp para fazer login
+                💡 Use seu email para fazer login
               </p>
             </div>
 

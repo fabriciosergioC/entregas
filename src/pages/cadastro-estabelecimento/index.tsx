@@ -12,53 +12,14 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function CadastroEstabelecimento() {
   const router = useRouter();
   const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('');
   const [cnpj, setCnpj] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [telefoneFormatado, setTelefoneFormatado] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
-
-  // Formatar telefone enquanto digita
-  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const valor = e.target.value;
-    setTelefoneFormatado(valor);
-    
-    // Extrair apenas números
-    const numeros = valor.replace(/\D/g, '');
-    setTelefone(numeros);
-  };
-
-  // Formatar telefone quando o valor mudar
-  const handleTelefoneBlur = () => {
-    let valor = telefoneFormatado.replace(/\D/g, '');
-    
-    if (valor.length > 11) valor = valor.slice(0, 11);
-
-    if (valor.length > 10) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7)}`;
-    } else if (valor.length > 6) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}-${valor.slice(6)}`;
-    } else if (valor.length > 2) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}`;
-    } else if (valor.length > 0) {
-      valor = `(${valor}`;
-    }
-
-    setTelefoneFormatado(valor);
-    setTelefone(valor.replace(/\D/g, ''));
-  };
-
-  // Validar telefone brasileiro
-  const validarTelefone = (tel: string) => {
-    // Remove todos os caracteres não numéricos
-    const numeros = tel.replace(/\D/g, '');
-    // Valida se tem 10 ou 11 dígitos (com ou sem formatação)
-    return (numeros.length === 10 || numeros.length === 11);
-  };
 
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,34 +27,17 @@ export default function CadastroEstabelecimento() {
     setErro('');
     setSucesso('');
 
-    // Formatar telefone antes de validar
-    let valor = telefoneFormatado.replace(/\D/g, '');
-    let telefoneNumeros = '';
-    
-    if (valor.length > 0) {
-      if (valor.length > 10) {
-        valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7)}`;
-      } else if (valor.length === 10) {
-        valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 6)}-${valor.slice(6)}`;
-      }
-      setTelefoneFormatado(valor);
-      setTelefone(valor.replace(/\D/g, ''));
-      
-      // Usa a variável local para validação imediata
-      telefoneNumeros = valor.replace(/\D/g, '');
-    } else {
-      telefoneNumeros = telefone;
-    }
-
     // Validações
-    if (!nome || !senha || !nomeEstabelecimento || !telefoneNumeros) {
+    if (!nome || !email || !senha || !nomeEstabelecimento) {
       setErro('Por favor, preencha todos os campos obrigatórios');
       setLoading(false);
       return;
     }
 
-    if (!validarTelefone(telefoneNumeros)) {
-      setErro('Por favor, informe um telefone/celular válido (com DDD)');
+    // Validar email
+    const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!emailValido) {
+      setErro('Por favor, informe um email válido');
       setLoading(false);
       return;
     }
@@ -111,10 +55,7 @@ export default function CadastroEstabelecimento() {
     }
 
     try {
-      console.log('📝 Criando conta...', { telefone: telefoneNumeros, nomeEstabelecimento });
-
-      // Criar usuário com Supabase Auth usando telefone como email
-      const emailFormatado = `${telefoneNumeros}@appentregas.com`;
+      console.log('📝 Criando conta...', { email, nomeEstabelecimento });
 
       // Inserir na tabela estabelecimentos
       const senhaHash = btoa(senha); // Hash básico (substituir por bcrypt em produção)
@@ -123,11 +64,11 @@ export default function CadastroEstabelecimento() {
         .from('estabelecimentos')
         .insert([
           {
-            email: emailFormatado,
+            email: email.toLowerCase(),
             senha_hash: senhaHash,
             nome_estabelecimento: nomeEstabelecimento,
             nome_responsavel: nome,
-            telefone: telefoneNumeros,
+            telefone: '',
             cnpj: cnpj,
             ativo: true,
           },
@@ -137,7 +78,7 @@ export default function CadastroEstabelecimento() {
 
       if (insertError) {
         if (insertError.code === '23505') { // Unique violation
-          throw new Error('Este telefone já está cadastrado');
+          throw new Error('Este email já está cadastrado');
         }
         throw insertError;
       }
@@ -242,6 +183,24 @@ export default function CadastroEstabelecimento() {
             </div>
 
             <div className="space-y-1">
+              <label className="block text-gray-700 font-semibold text-sm" htmlFor="email">
+                Email *
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📧</span>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
+                  placeholder="seu@email.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
               <label className="block text-gray-700 font-semibold text-sm" htmlFor="cnpj">
                 CNPJ (Opcional)
               </label>
@@ -256,29 +215,6 @@ export default function CadastroEstabelecimento() {
                   placeholder="00.000.000/0000-00"
                 />
               </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="telefone">
-                WhatsApp / Celular *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📱</span>
-                <input
-                  id="telefone"
-                  type="tel"
-                  value={telefoneFormatado}
-                  onChange={handleTelefoneChange}
-                  onBlur={handleTelefoneBlur}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="(00) 00000-0000"
-                  required
-                  autoComplete="off"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                🔒 Usado para verificação e contato (não enviamos spam)
-              </p>
             </div>
 
             <div className="space-y-1">
