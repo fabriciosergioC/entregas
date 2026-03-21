@@ -61,53 +61,35 @@ export default function LoginEstabelecimento() {
     try {
       console.log('📝 Tentando login...', { telefone });
 
-      // Buscar usuário por telefone no Supabase
-      const { data: usuarios, error: buscaErro } = await supabase
-        .from('entregadores')
-        .select('*')
-        .eq('telefone', telefone)
-        .single();
+      // Login com Supabase Auth usando telefone formatado como email
+      const { data: authData, error: authErro } = await supabase.auth.signInWithPassword({
+        email: `${telefone}@appentregas.com`,
+        password: senha,
+      });
 
-      if (buscaErro || !usuarios) {
-        // Tenta buscar nos metadados do auth
-        const { data: authData, error: authErro } = await supabase.auth.signInWithPassword({
-          email: `${telefone}@appentregas.com`,
-          password: senha,
-        });
-
-        if (authErro) {
-          throw new Error('Telefone ou senha inválidos');
-        }
-
-        // Login bem sucedido via email formatado
-        const nomeEstabelecimento = authData.user.user_metadata?.nome_estabelecimento || 'Estabelecimento';
-        
-        localStorage.setItem('estabelecimento_user', JSON.stringify({
-          id: authData.user.id,
-          email: authData.user.email,
-          token: authData.session?.access_token,
-          nome_estabelecimento: nomeEstabelecimento,
-          telefone: telefone,
-        }));
-
-        localStorage.setItem('nome_estabelecimento', nomeEstabelecimento);
-        router.push('/estabelecimento');
-        return;
+      if (authErro) {
+        throw new Error('Telefone ou senha inválidos');
       }
 
-      console.log('✅ Login realizado com sucesso:', usuarios);
+      console.log('✅ Login realizado com sucesso:', authData.user);
+
+      // Buscar dados adicionais do usuário dos metadados
+      const nomeEstabelecimento = authData.user.user_metadata?.nome_estabelecimento || 'Estabelecimento';
+      const telefoneSalvo = authData.user.user_metadata?.telefone || telefone;
 
       // Salvar dados do usuário no localStorage
       localStorage.setItem('estabelecimento_user', JSON.stringify({
-        id: usuarios.id,
-        email: `${telefone}@appentregas.com`,
-        token: 'local-token',
-        nome_estabelecimento: usuarios.nome || 'Estabelecimento',
-        telefone: usuarios.telefone,
+        id: authData.user.id,
+        email: authData.user.email,
+        token: authData.session?.access_token,
+        nome_estabelecimento: nomeEstabelecimento,
+        telefone: telefoneSalvo,
       }));
 
       // Salvar nome do estabelecimento separadamente para o painel
-      localStorage.setItem('nome_estabelecimento', usuarios.nome || 'Estabelecimento');
+      localStorage.setItem('nome_estabelecimento', nomeEstabelecimento);
+
+      console.log('💾 Dados salvos:', { nomeEstabelecimento, telefone: telefoneSalvo });
 
       // Redirecionar para página do estabelecimento
       router.push('/estabelecimento');
