@@ -22,8 +22,8 @@ export const api = {
   // ENTREGADORES
   // =============================================
 
-  async loginEntregador(nome: string, telefone: string) {
-    return await entregadoresApi.login(nome, telefone);
+  async loginEntregador(nome: string, telefone: string, senha?: string) {
+    return await entregadoresApi.login(nome, telefone, senha);
   },
 
   async atualizarLocalizacao(entregadorId: string, lat: number, lng: number) {

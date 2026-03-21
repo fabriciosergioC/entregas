@@ -2,12 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import EstabelecimentoCard from '@/components/estabelecimentoCard/EstabelecimentoCard';
+
+interface Estabelecimento {
+  id: string;
+  nome_estabelecimento: string;
+  nome_responsavel: string;
+  email: string;
+  telefone: string;
+  cnpj?: string;
+  ativo: boolean;
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function PainelClientePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pedidoId, setPedidoId] = useState('');
   const [erro, setErro] = useState('');
+  const [estabelecimentos, setEstabelecimentos] = useState<Estabelecimento[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filtro, setFiltro] = useState('');
 
   // Verificar se vem um ID pela URL (parâmetro ?id=)
   useEffect(() => {
@@ -17,9 +36,41 @@ export default function PainelClientePage() {
     }
   }, [searchParams]);
 
+  // Buscar estabelecimentos
+  useEffect(() => {
+    async function buscarEstabelecimentos() {
+      try {
+        setLoading(true);
+        
+        const { data, error } = await supabase
+          .from('estabelecimentos')
+          .select('*')
+          .eq('ativo', true)
+          .order('nome_estabelecimento', { ascending: true });
+
+        if (error) {
+          console.error('Erro ao buscar estabelecimentos:', error);
+          setErro('Erro ao carregar estabelecimentos');
+          return;
+        }
+
+        if (data) {
+          setEstabelecimentos(data);
+        }
+      } catch (err) {
+        console.error('Erro inesperado:', err);
+        setErro('Erro ao carregar estabelecimentos');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    buscarEstabelecimentos();
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!pedidoId.trim()) {
       setErro('Por favor, digite o ID do seu pedido');
       return;
@@ -35,10 +86,16 @@ export default function PainelClientePage() {
     router.push(`/painel-cliente/${pedidoId.trim()}`);
   };
 
+  // Filtrar estabelecimentos
+  const estabelecimentosFiltrados = estabelecimentos.filter((estab) =>
+    estab.nome_estabelecimento.toLowerCase().includes(filtro.toLowerCase()) ||
+    estab.nome_responsavel.toLowerCase().includes(filtro.toLowerCase())
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-500 to-green-700 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Ícone/Logo */}
+    <div className="min-h-screen bg-gradient-to-br from-green-500 to-green-700 p-4 py-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Cabeçalho */}
         <div className="text-center mb-8">
           <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
             <span className="text-5xl">📦</span>
@@ -47,13 +104,79 @@ export default function PainelClientePage() {
           <h1 className="text-4xl font-bold text-white mb-2">
             Acompanhe seu Pedido
           </h1>
-          <p className="text-green-100 text-lg">
-            Digite o ID do pedido ou cole o link para rastrear em tempo real
+          <p className="text-green-100 text-lg mb-6">
+            Digite o ID do pedido ou escolha um estabelecimento
           </p>
+
+          {/* Busca de Estabelecimentos */}
+          <div className="max-w-md mx-auto mb-4">
+            <input
+              type="text"
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              placeholder="🔍 Buscar estabelecimento..."
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-gray-800"
+            />
+          </div>
         </div>
 
-        {/* Formulário */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        {/* Lista de Estabelecimentos */}
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-white">
+              🏪 Estabelecimentos Cadastrados
+            </h2>
+            <span className="text-green-100 text-sm">
+              {estabelecimentosFiltrados.length} encontrado(s)
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="w-16 h-16 bg-gray-300 rounded-xl"></div>
+                    <div className="flex-1">
+                      <div className="h-6 bg-gray-300 rounded mb-2"></div>
+                      <div className="h-4 bg-gray-300 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 bg-gray-300 rounded"></div>
+                    <div className="h-4 bg-gray-300 rounded w-3/4"></div>
+                  </div>
+                  <div className="h-12 bg-gray-300 rounded-lg"></div>
+                </div>
+              ))}
+            </div>
+          ) : estabelecimentosFiltrados.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {estabelecimentosFiltrados.map((estabelecimento) => (
+                <EstabelecimentoCard
+                  key={estabelecimento.id}
+                  estabelecimento={estabelecimento}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 text-center">
+              <span className="text-6xl mb-4 block">😕</span>
+              <p className="text-white text-lg">
+                {filtro 
+                  ? `Nenhum estabelecimento encontrado para "${filtro}"`
+                  : 'Nenhum estabelecimento cadastrado ainda'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Rastrear Pedido */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+          <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+            🚀 Rastrear Pedido Existente
+          </h3>
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="pedidoId" className="block text-sm font-medium text-gray-700 mb-2">
@@ -106,7 +229,7 @@ export default function PainelClientePage() {
         </div>
 
         {/* Funcionalidades */}
-        <div className="mt-8 bg-white/10 backdrop-blur-sm rounded-2xl p-6">
+        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 mb-8">
           <h3 className="text-white font-bold mb-4 text-center">O que você pode acompanhar:</h3>
           <div className="space-y-3 text-white">
             <div className="flex items-center gap-3">
@@ -129,10 +252,10 @@ export default function PainelClientePage() {
         </div>
 
         {/* Voltar */}
-        <div className="mt-6 text-center">
+        <div className="text-center">
           <button
             onClick={() => router.push('/')}
-            className="text-green-100 hover:text-white transition-colors text-sm"
+            className="text-green-100 hover:text-white transition-colors text-sm bg-white/10 backdrop-blur-sm px-6 py-3 rounded-lg"
           >
             ← Voltar para página inicial
           </button>

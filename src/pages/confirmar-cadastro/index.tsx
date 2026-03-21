@@ -14,189 +14,79 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export default function ConfirmarCadastro() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [codigo, setCodigo] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
   const [email, setEmail] = useState('');
-  const [tempoRestante, setTempoRestante] = useState(300); // 5 minutos
+  const [token, setToken] = useState('');
 
-  // Pegar email dos parâmetros
+  // Pegar email e token dos parâmetros e confirmar automaticamente
   useEffect(() => {
     const emailParam = searchParams?.get('email');
-    if (emailParam) {
+    const tokenParam = searchParams?.get('token');
+    
+    if (emailParam && tokenParam) {
       setEmail(emailParam);
+      setToken(tokenParam);
+      confirmarCadastro(tokenParam, emailParam);
     } else {
-      setErro('Email não informado. Redirecionando...');
+      setErro('Link inválido. Redirecionando...');
       setTimeout(() => router.push('/cadastro-estabelecimento'), 3000);
     }
   }, [searchParams, router]);
 
-  // Verificar se já foi confirmado
-  useEffect(() => {
-    const verificarConfirmacao = async () => {
-      if (!email) return;
-      
-      const { data } = await supabase
-        .from('estabelecimentos')
-        .select('ativo')
-        .eq('email', email.toLowerCase())
-        .single();
-      
-      if (data?.ativo === true) {
-        setSucesso('✅ Email já confirmado! Redirecionando para login...');
-        setTimeout(() => router.push('/login-estabelecimento'), 2000);
-      }
-    };
-    
-    verificarConfirmacao();
-  }, [email]);
-
-  // Timer de expiração
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTempoRestante((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // Formatar tempo restante
-  const formatarTempo = (segundos: number) => {
-    const minutos = Math.floor(segundos / 60);
-    const secs = segundos % 60;
-    return `${minutos}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Lidar com mudança de código
-  const handleCodigoChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    
-    const novoCodigo = [...codigo];
-    novoCodigo[index] = value;
-    setCodigo(novoCodigo);
-
-    // Pular para próximo campo automaticamente
-    if (value && index < 5) {
-      const nextInput = document.getElementById(`codigo-${index + 1}`);
-      nextInput?.focus();
-    }
-  };
-
-  // Lidar com backspace
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !codigo[index] && index > 0) {
-      const prevInput = document.getElementById(`codigo-${index - 1}`);
-      prevInput?.focus();
-    }
-  };
-
-  // Colar código
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').slice(0, 6);
-    
-    if (/^\d+$/.test(pastedData)) {
-      const novoCodigo = [...codigo];
-      for (let i = 0; i < pastedData.length && i < 6; i++) {
-        novoCodigo[i] = pastedData[i];
-      }
-      setCodigo(novoCodigo);
-      
-      // Focar no último campo preenchido
-      const lastIndex = Math.min(pastedData.length, 5);
-      const lastInput = document.getElementById(`codigo-${lastIndex}`);
-      lastInput?.focus();
-    }
-  };
-
-  // Verificar código
-  const handleVerificar = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const confirmarCadastro = async (tokenParam: string, emailParam: string) => {
     setLoading(true);
-    setErro('');
-    setSucesso('');
-
-    const codigoCompleto = codigo.join('');
-
-    if (codigoCompleto.length !== 6) {
-      setErro('Por favor, digite o código completo de 6 dígitos');
-      setLoading(false);
-      return;
-    }
-
+    
     try {
-      // Buscar código salvo no localStorage
-      const codigoSalvo = localStorage.getItem('codigo_verificacao_' + email.toLowerCase());
-      
-      if (!codigoSalvo) {
-        throw new Error('Código não encontrado. Faça o cadastro novamente.');
+      // Buscar estabelecimento pelo email
+      const { data: estabelecimento, error: buscaErro } = await supabase
+        .from('estabelecimentos')
+        .select('id, ativo')
+        .eq('email', emailParam.toLowerCase())
+        .single();
+
+      if (buscaErro || !estabelecimento) {
+        setErro('❌ Cadastro não encontrado. Faça um novo cadastro.');
+        setLoading(false);
+        return;
       }
 
-      if (codigoSalvo !== codigoCompleto) {
-        throw new Error('Código inválido. Verifique e tente novamente.');
+      if (estabelecimento.ativo) {
+        setSucesso('✅ Cadastro já está confirmado! Redirecionando para login...');
+        setTimeout(() => router.push('/login-estabelecimento'), 3000);
+        return;
       }
 
-      // Código correto - ativar estabelecimento
-      const { error: updateError } = await supabase
+      // Ativar estabelecimento
+      const { error: updateErro } = await supabase
         .from('estabelecimentos')
         .update({ ativo: true })
-        .eq('email', email.toLowerCase());
+        .eq('id', estabelecimento.id);
 
-      if (updateError) {
-        console.error('Erro ao ativar estabelecimento:', updateError);
-        throw new Error('Erro ao confirmar cadastro. Tente novamente.');
+      if (updateErro) {
+        setErro('❌ Erro ao confirmar cadastro. Tente novamente.');
+        setLoading(false);
+        return;
       }
 
-      // Limpar código do localStorage
-      localStorage.removeItem('codigo_verificacao_' + email.toLowerCase());
-      localStorage.removeItem('email_verificacao');
+      // Marcar magic link como usado (se existir)
+      try {
+        await supabase
+          .from('magic_links')
+          .update({ usado: true, usado_em: new Date().toISOString() })
+          .eq('token', tokenParam)
+          .eq('email', emailParam);
+      } catch (err) {
+        // Ignora se tabela não existir
+      }
 
-      setSucesso('✅ Email confirmado com sucesso! Redirecionando...');
-
-      // Aguardar 2 segundos e redirecionar para login
-      setTimeout(() => {
-        router.push('/login-estabelecimento');
-      }, 2000);
-
-    } catch (error) {
-      console.error('Erro ao verificar código:', error);
-      setErro(error instanceof Error ? error.message : 'Erro ao verificar código');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Reenviar código
-  const handleReenviar = async () => {
-    if (tempoRestante > 0) return;
-
-    setLoading(true);
-    setErro('');
-    setSucesso('');
-
-    try {
-      // Gerar novo código
-      const novoCodigo = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Salvar novo código no localStorage
-      localStorage.setItem('codigo_verificacao_' + email.toLowerCase(), novoCodigo);
-      
-      // Mostrar código no console
-      console.log('📧 NOVO CÓDIGO DE VERIFICAÇÃO:', novoCodigo);
-      
-      setSucesso('✅ Novo código gerado! Verifique o console (F12)');
-      setTempoRestante(300); // Resetar timer
+      setSucesso('✅ Cadastro confirmado com sucesso! Redirecionando para login...');
+      setTimeout(() => router.push('/login-estabelecimento'), 3000);
 
     } catch (error) {
-      console.error('Erro ao reenviar código:', error);
-      setErro('Erro ao reenviar código');
+      console.error('Erro ao confirmar cadastro:', error);
+      setErro('Erro ao confirmar cadastro. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -206,137 +96,73 @@ export default function ConfirmarCadastro() {
     <>
       <Head>
         <title>Confirmar Cadastro</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <meta name="theme-color" content="#10b981" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-green-600 via-green-500 to-emerald-600 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-green-600 via-green-500 to-emerald-600 flex items-center justify-center p-4 py-8">
         <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 w-full max-w-md">
-          {/* Logo/Ícone */}
+          {/* Ícone */}
           <div className="text-center mb-8">
             <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="text-5xl">📧</span>
-            </div>
-            <h1 className="text-3xl font-bold text-gray-800">Confirmar Cadastro</h1>
-            <p className="text-gray-500 mt-2 text-sm">
-              Digite o código enviado para seu email
-            </p>
-            {email && (
-              <p className="text-green-600 font-medium mt-1">
-                {email}
-              </p>
-            )}
-          </div>
-
-          {/* Timer */}
-          <div className="text-center mb-6">
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
-              tempoRestante > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-            }`}>
-              <span className="text-2xl">⏱️</span>
-              <span className="font-bold">{formatarTempo(tempoRestante)}</span>
-            </div>
-          </div>
-
-          {/* Formulário */}
-          <form onSubmit={handleVerificar} className="space-y-6">
-            {erro && (
-              <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-r-lg text-sm">
-                <span className="font-medium">⚠️ Erro:</span> {erro}
-              </div>
-            )}
-
-            {sucesso && (
-              <div className="bg-green-50 border-l-4 border-green-500 text-green-700 px-4 py-3 rounded-r-lg text-sm">
-                <span className="font-medium">✅ Sucesso:</span> {sucesso}
-              </div>
-            )}
-
-            {/* Campos do Código */}
-            <div className="flex justify-center gap-2">
-              {codigo.map((digito, index) => (
-                <input
-                  key={index}
-                  id={`codigo-${index}`}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digito}
-                  onChange={(e) => handleCodigoChange(index, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
-                  onPaste={handlePaste}
-                  className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none bg-white"
-                  disabled={loading || !!sucesso}
-                />
-              ))}
-            </div>
-
-            {/* Botão Verificar */}
-            <button
-              type="submit"
-              disabled={loading || codigo.join('').length !== 6 || !!sucesso}
-              className={`w-full font-bold py-4 px-4 rounded-xl shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 ${
-                loading || codigo.join('').length !== 6 || !!sucesso
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white'
-              }`}
-            >
               {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Verificando...
-                </>
+                <svg className="animate-spin h-12 w-12 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
               ) : sucesso ? (
-                <>
-                  <span>✅</span>
-                  Confirmado!
-                </>
+                <span className="text-5xl">✅</span>
               ) : (
-                <>
-                  <span>🔐</span>
-                  Verificar Código
-                </>
+                <span className="text-5xl">❌</span>
               )}
-            </button>
-
-            {/* Reenviar Código */}
-            <div className="text-center">
-              <p className="text-gray-600 text-sm mb-2">Não recebeu o código?</p>
-              <button
-                type="button"
-                onClick={handleReenviar}
-                disabled={loading || tempoRestante > 0 || !!sucesso}
-                className={`text-sm font-semibold underline ${
-                  tempoRestante > 0 || !!sucesso
-                    ? 'text-gray-400 cursor-not-allowed'
-                    : 'text-green-600 hover:text-green-700'
-                }`}
-              >
-                {tempoRestante > 0 
-                  ? `Reenviar em ${formatarTempo(tempoRestante)}`
-                  : '📤 Reenviar Código'
-                }
-              </button>
             </div>
+            
+            {loading ? (
+              <>
+                <h1 className="text-3xl font-bold text-gray-800">Confirmando Cadastro</h1>
+                <p className="text-gray-500 mt-2 text-sm">Aguarde um momento...</p>
+              </>
+            ) : sucesso ? (
+              <>
+                <h1 className="text-3xl font-bold text-gray-800">Cadastro Confirmado!</h1>
+                <p className="text-gray-500 mt-2 text-sm">Seu cadastro foi confirmado com sucesso.</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-3xl font-bold text-gray-800">Ops! Algo deu errado</h1>
+                <p className="text-gray-500 mt-2 text-sm">Não foi possível confirmar seu cadastro.</p>
+              </>
+            )}
+          </div>
 
-            {/* Voltar */}
+          {/* Mensagens */}
+          {erro && (
+            <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-r-lg text-sm mb-4">
+              <span className="font-medium">⚠️ Erro:</span> {erro}
+            </div>
+          )}
+
+          {sucesso && (
+            <div className="bg-green-50 border-l-4 border-green-500 text-green-700 px-4 py-3 rounded-r-lg text-sm mb-4">
+              <span className="font-medium">✅ Sucesso:</span> {sucesso}
+            </div>
+          )}
+
+          {/* Botão Voltar */}
+          {!loading && (
             <button
-              type="button"
-              onClick={() => router.push('/cadastro-estabelecimento')}
+              onClick={() => router.push('/login-estabelecimento')}
               className="w-full font-bold py-4 px-4 rounded-xl shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white"
             >
-              ← Voltar
+              <span>←</span>
+              Ir para Login
             </button>
-          </form>
+          )}
 
-          {/* Instruções */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-700">
-              <strong>💡 Dica:</strong> O código de verificação foi enviado para seu email. 
-              Verifique também a caixa de spam. O código expira em 5 minutos.
+          {/* Rodapé */}
+          <div className="text-center mt-6">
+            <p className="text-gray-500 text-xs">
+              🔒 Seus dados estão seguros e protegidos
             </p>
           </div>
         </div>

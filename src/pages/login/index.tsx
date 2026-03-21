@@ -7,10 +7,9 @@ import '@/app/globals.css';
 export default function Login() {
   const router = useRouter();
   const [nome, setNome] = useState('');
-  const [telefone, setTelefone] = useState('');
+  const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
-  const [telefoneFormatado, setTelefoneFormatado] = useState('');
   const [statusSupabase, setStatusSupabase] = useState<'online' | 'offline'>('online');
 
   // Verificar se Supabase está configurado
@@ -23,40 +22,29 @@ export default function Login() {
     }
   }, []);
 
-  // Formatar telefone enquanto digita
-  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let valor = e.target.value.replace(/\D/g, '');
-    if (valor.length > 11) valor = valor.slice(0, 11);
-
-    if (valor.length > 10) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7)}`;
-    } else if (valor.length > 6) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}-${valor.slice(6)}`;
-    } else if (valor.length > 2) {
-      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}`;
-    } else if (valor.length > 0) {
-      valor = `(${valor}`;
-    }
-
-    setTelefoneFormatado(valor);
-    setTelefone(valor.replace(/\D/g, ''));
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErro('');
 
-    if (telefone.replace(/\D/g, '').length < 10) {
-      setErro('Por favor, informe um telefone válido');
+    // Validações
+    if (!nome || !senha) {
+      setErro('Por favor, preencha nome e senha');
+      setLoading(false);
+      return;
+    }
+
+    // Validar senha (mínimo 4 caracteres)
+    if (senha.length < 4) {
+      setErro('Por favor, informe uma senha com pelo menos 4 caracteres');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('📝 Tentando login...', { nome, telefone });
+      console.log('📝 Tentando login...', { nome, senha: '***' });
 
-      const entregador = await api.loginEntregador(nome, telefone);
+      const entregador = await api.loginEntregador(nome, '', senha);
 
       console.log('✅ Login realizado com sucesso:', entregador);
 
@@ -145,18 +133,19 @@ export default function Login() {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="telefone">
-                Telefone / WhatsApp
+              <label className="block text-gray-700 font-semibold text-sm" htmlFor="senha">
+                Senha
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📱</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">🔒</span>
                 <input
-                  id="telefone"
-                  type="tel"
-                  value={telefoneFormatado}
-                  onChange={handleTelefoneChange}
+                  id="senha"
+                  type="password"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
                   className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 bg-gray-50"
-                  placeholder="(00) 00000-0000"
+                  placeholder="Digite sua senha"
+                  minLength={4}
                   required
                 />
               </div>
@@ -187,10 +176,23 @@ export default function Login() {
               )}
             </button>
 
+            <div className="text-center">
+              <p className="text-gray-600 text-sm">
+                Não tem conta?{' '}
+                <button
+                  type="button"
+                  onClick={() => router.push('/cadastro-entregador')}
+                  className="text-green-600 hover:text-green-700 font-semibold underline"
+                >
+                  Cadastrar Entregador
+                </button>
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={() => router.push('/')}
-              className={`w-full font-bold py-4 px-4 rounded-xl shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white`}
+              className="w-full font-bold py-4 px-4 rounded-xl shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white"
             >
               ← Voltar
             </button>

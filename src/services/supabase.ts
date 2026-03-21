@@ -67,25 +67,38 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 export const entregadoresApi = {
   // Login/Criar entregador
-  async login(nome: string, telefone: string) {
-    // Tenta encontrar entregador existente
+  async login(nome: string, telefone: string, senha?: string) {
+    // Tenta encontrar entregador existente pelo nome
     const { data: existente, error: erroBusca } = await supabase
       .from('entregadores')
       .select('*')
-      .eq('telefone', telefone)
+      .ilike('nome', nome)
       .single();
 
     if (existente) {
+      // Verificar senha se o entregador já existe
+      if (existente.senha_hash) {
+        const senhaDecodificada = atob(existente.senha_hash);
+        if (senhaDecodificada !== senha) {
+          throw new Error('Senha incorreta');
+        }
+      }
       return { data: existente, error: null };
     }
 
-    // Cria novo entregador
+    // Se não encontrou e tem telefone, cria novo entregador (primeiro acesso)
+    if (!telefone) {
+      throw new Error('Entregador não encontrado. Por favor, faça seu cadastro primeiro.');
+    }
+
+    // Cria novo entregador (primeiro acesso - cadastra senha)
     const { data: novo, error: erroCriacao } = await supabase
       .from('entregadores')
       .insert([
         {
           nome,
           telefone,
+          senha_hash: senha ? btoa(senha) : null,
           disponivel: true,
         },
       ])

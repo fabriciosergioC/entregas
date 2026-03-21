@@ -14,7 +14,7 @@ export default function LoginEstabelecimento() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState('');
+  const [erro, setErro] = useState<string | React.ReactNode>('');
   const [statusSupabase, setStatusSupabase] = useState<'online' | 'offline'>('online');
 
   // Verificar se Supabase está configurado
@@ -50,17 +50,6 @@ export default function LoginEstabelecimento() {
         .single();
 
       if (buscaErro || !estabelecimento) {
-        // Verificar se o email existe mas não está confirmado
-        const { data: estabelecimentoPendente } = await supabase
-          .from('estabelecimentos')
-          .select('*')
-          .eq('email', email.toLowerCase())
-          .eq('ativo', false)
-          .single();
-
-        if (estabelecimentoPendente) {
-          throw new Error('Email não confirmado. Verifique o código de confirmação.');
-        }
         throw new Error('Email ou senha inválidos');
       }
 
@@ -149,7 +138,8 @@ export default function LoginEstabelecimento() {
           <form onSubmit={handleLogin} className="space-y-5">
             {erro && (
               <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-r-lg text-sm">
-                <span className="font-medium">⚠️ Erro:</span> {erro}
+                <span className="font-medium">⚠️ Erro:</span>{' '}
+                {typeof erro === 'string' ? erro : erro}
               </div>
             )}
 

@@ -9,17 +9,35 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default function CadastroEstabelecimento() {
+export default function CadastroEntregador() {
   const router = useRouter();
   const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
-  const [nomeEstabelecimento, setNomeEstabelecimento] = useState('');
-  const [cnpj, setCnpj] = useState('');
+  const [telefoneFormatado, setTelefoneFormatado] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
+
+  // Formatar telefone enquanto digita
+  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let valor = e.target.value.replace(/\D/g, '');
+    if (valor.length > 11) valor = valor.slice(0, 11);
+
+    if (valor.length >= 10) {
+      valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 7)}-${valor.slice(7, 11)}`;
+    } else if (valor.length > 6) {
+      valor = `(${valor.slice(0, 2)}) ${valor.slice(2, 6)}-${valor.slice(6)}`;
+    } else if (valor.length > 2) {
+      valor = `(${valor.slice(0, 2)}) ${valor.slice(2)}`;
+    } else if (valor.length > 0) {
+      valor = `(${valor}`;
+    }
+
+    setTelefoneFormatado(valor);
+    setTelefone(valor.replace(/\D/g, ''));
+  };
 
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,22 +46,23 @@ export default function CadastroEstabelecimento() {
     setSucesso('');
 
     // Validações
-    if (!nome || !email || !senha || !nomeEstabelecimento) {
+    if (!nome || !telefone || !senha) {
       setErro('Por favor, preencha todos os campos obrigatórios');
       setLoading(false);
       return;
     }
 
-    // Validar email
-    const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!emailValido) {
-      setErro('Por favor, informe um email válido');
+    // Validar telefone (10 ou 11 dígitos)
+    const telefoneLimpo = telefone.replace(/\D/g, '');
+    if (telefoneLimpo.length < 10 || telefoneLimpo.length > 11) {
+      setErro('Por favor, informe um telefone válido (com DDD)');
       setLoading(false);
       return;
     }
 
-    if (senha.length < 6) {
-      setErro('A senha deve ter pelo menos 6 caracteres');
+    // Validar senha
+    if (senha.length < 4) {
+      setErro('A senha deve ter pelo menos 4 caracteres');
       setLoading(false);
       return;
     }
@@ -55,61 +74,48 @@ export default function CadastroEstabelecimento() {
     }
 
     try {
-      console.log('📝 Criando conta...', { email, nomeEstabelecimento });
+      console.log('📝 Criando conta de entregador...', { nome, telefone });
 
-      // Verificar se já existe cadastro
-      const { data: existente, error: buscaErro } = await supabase
-        .from('estabelecimentos')
-        .select('id, ativo')
-        .eq('email', email.toLowerCase())
+      // Verificar se já existe entregador com este telefone
+      const { data: existente } = await supabase
+        .from('entregadores')
+        .select('id')
+        .eq('telefone', telefone)
         .maybeSingle();
 
-      if (buscaErro) {
-        console.error('Erro ao buscar estabelecimento:', buscaErro);
-      }
-
       if (existente) {
-        if (!existente.ativo) {
-          throw new Error('Este email já está cadastrado mas não foi confirmado.');
-        }
-        throw new Error('Este email já está cadastrado e confirmado.');
+        throw new Error('Este telefone já está cadastrado');
       }
 
       // Hash da senha
       const senhaHash = btoa(senha);
 
-      // Inserir na tabela estabelecimentos (JÁ ATIVO - sem confirmação)
-      const { data: estabelecimento, error: insertError } = await supabase
-        .from('estabelecimentos')
+      // Criar entregador
+      const { data: entregador, error: insertError } = await supabase
+        .from('entregadores')
         .insert([
           {
-            email: email.toLowerCase(),
+            nome,
+            telefone,
             senha_hash: senhaHash,
-            nome_estabelecimento: nomeEstabelecimento,
-            nome_responsavel: nome,
-            telefone: '',
-            cnpj: cnpj || '',
-            ativo: true, // JÁ ATIVO! Sem confirmação necessária
+            disponivel: true,
           },
         ])
         .select()
         .single();
 
       if (insertError) {
-        if (insertError.code === '23505') {
-          throw new Error('Este email já está cadastrado');
-        }
-        console.error('Erro ao criar estabelecimento:', insertError);
+        console.error('Erro ao criar entregador:', insertError);
         throw new Error('Erro ao criar conta. Tente novamente.');
       }
 
-      console.log('✅ Estabelecimento criado com sucesso:', estabelecimento);
+      console.log('✅ Entregador criado com sucesso:', entregador);
 
       setSucesso('✅ Cadastro realizado com sucesso! Redirecionando para login...');
 
       // Redirecionar para login após 2 segundos
       setTimeout(() => {
-        router.push('/login-estabelecimento');
+        router.push('/login');
       }, 2000);
 
     } catch (error) {
@@ -118,13 +124,7 @@ export default function CadastroEstabelecimento() {
       let mensagemErro = 'Erro ao criar conta.';
 
       if (error instanceof Error) {
-        if (error.message.includes('User already registered')) {
-          mensagemErro = 'Este email já está cadastrado';
-        } else if (error.message.includes('Invalid email')) {
-          mensagemErro = 'Email inválido';
-        } else {
-          mensagemErro = `Erro: ${error.message}`;
-        }
+        mensagemErro = `Erro: ${error.message}`;
       }
 
       setErro(mensagemErro);
@@ -136,24 +136,24 @@ export default function CadastroEstabelecimento() {
   return (
     <>
       <Head>
-        <title>Cadastro - Estabelecimento</title>
+        <title>Cadastro - Entregador</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <meta name="theme-color" content="#10b981" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-green-600 via-green-500 to-emerald-600 flex items-center justify-center p-4 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-green-600 via-green-500 to-emerald-600 flex items-center justify-center p-4">
         <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 w-full max-w-md">
           {/* Logo/Ícone */}
           <div className="text-center mb-8">
             <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="text-5xl">🏪</span>
+              <span className="text-5xl">🛵</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-800">Cadastrar Estabelecimento</h1>
-            <p className="text-gray-500 mt-2 text-sm">Crie sua conta para gerenciar pedidos</p>
+            <h1 className="text-3xl font-bold text-gray-800">Cadastro de Entregador</h1>
+            <p className="text-gray-500 mt-2 text-sm">Cadastre-se para começar a receber pedidos</p>
           </div>
 
           {/* Formulário */}
-          <form onSubmit={handleCadastro} className="space-y-4">
+          <form onSubmit={handleCadastro} className="space-y-5">
             {erro && (
               <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-r-lg text-sm">
                 <span className="font-medium">⚠️ Erro:</span> {erro}
@@ -167,26 +167,8 @@ export default function CadastroEstabelecimento() {
             )}
 
             <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="nomeEstabelecimento">
-                Nome do Estabelecimento *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">🏪</span>
-                <input
-                  id="nomeEstabelecimento"
-                  type="text"
-                  value={nomeEstabelecimento}
-                  onChange={(e) => setNomeEstabelecimento(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="Ex: Pizzaria do João"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
               <label className="block text-gray-700 font-semibold text-sm" htmlFor="nome">
-                Seu Nome *
+                Nome Completo *
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">👤</span>
@@ -195,46 +177,33 @@ export default function CadastroEstabelecimento() {
                   type="text"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="Seu nome completo"
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 bg-gray-50"
+                  placeholder="Digite seu nome completo"
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="email">
-                Email *
+              <label className="block text-gray-700 font-semibold text-sm" htmlFor="telefone">
+                Telefone / WhatsApp (com DDD) *
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📧</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📱</span>
                 <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="seu@email.com"
+                  id="telefone"
+                  type="tel"
+                  value={telefoneFormatado}
+                  onChange={handleTelefoneChange}
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 bg-gray-50"
+                  placeholder="(11) 99999-9999"
+                  maxLength={15}
                   required
                 />
               </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-gray-700 font-semibold text-sm" htmlFor="cnpj">
-                CNPJ (Opcional)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📄</span>
-                <input
-                  id="cnpj"
-                  type="text"
-                  value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="00.000.000/0000-00"
-                />
-              </div>
+              <p className="text-xs text-gray-500 ml-1">
+                📞 Seu telefone será exibido no painel de pedidos
+              </p>
             </div>
 
             <div className="space-y-1">
@@ -248,8 +217,9 @@ export default function CadastroEstabelecimento() {
                   type="password"
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
-                  placeholder="Mínimo 6 caracteres"
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 bg-gray-50"
+                  placeholder="Mínimo 4 caracteres"
+                  minLength={4}
                   required
                 />
               </div>
@@ -266,8 +236,9 @@ export default function CadastroEstabelecimento() {
                   type="password"
                   value={confirmarSenha}
                   onChange={(e) => setConfirmarSenha(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 bg-gray-50"
                   placeholder="Repita a senha"
+                  minLength={4}
                   required
                 />
               </div>
@@ -288,7 +259,7 @@ export default function CadastroEstabelecimento() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Criando conta...
+                  Cadastrando...
                 </>
               ) : sucesso ? (
                 <>
@@ -308,7 +279,7 @@ export default function CadastroEstabelecimento() {
                 Já tem conta?{' '}
                 <button
                   type="button"
-                  onClick={() => router.push('/login-estabelecimento')}
+                  onClick={() => router.push('/login')}
                   className="text-green-600 hover:text-green-700 font-semibold underline"
                 >
                   Fazer Login
@@ -319,7 +290,7 @@ export default function CadastroEstabelecimento() {
             <button
               type="button"
               onClick={() => router.push('/')}
-              className={`w-full font-bold py-4 px-4 rounded-xl shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white`}
+              className="w-full font-bold py-4 px-4 rounded-xl shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white"
             >
               ← Voltar
             </button>

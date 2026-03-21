@@ -5,6 +5,7 @@ import { escolherAppNavegacao } from '@/utils/navegacao';
 
 interface PedidoCardProps {
   pedido: Pedido;
+  entregador?: { nome: string; telefone: string } | null;
   onAceitar?: () => void;
   onIniciar?: () => void;
   onFinalizar?: () => void;
@@ -13,6 +14,7 @@ interface PedidoCardProps {
 
 export default function PedidoCard({
   pedido,
+  entregador,
   onAceitar,
   onIniciar,
   onFinalizar,
@@ -91,6 +93,26 @@ export default function PedidoCard({
             {new Date(pedido.created_at).toLocaleString('pt-BR')}
           </p>
         </div>
+
+        {/* Informações do entregador (se houver) */}
+        {entregador && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">🛵</span>
+              <p className="font-bold text-blue-900 text-sm">Entregador:</p>
+            </div>
+            <p className="text-blue-800 text-sm ml-7">{entregador.nome}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-blue-600">📱</span>
+              <a
+                href={`tel:${entregador.telefone}`}
+                className="text-blue-700 text-sm font-semibold hover:underline"
+              >
+                {entregador.telefone}
+              </a>
+            </div>
+          </div>
+        )}
       </div>
 
       {mostrarAcoes && (
