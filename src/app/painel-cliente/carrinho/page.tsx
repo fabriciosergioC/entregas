@@ -141,14 +141,11 @@ export default function CarrinhoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-500 to-emerald-600 p-4 py-8">
+    <div className="min-h-screen bg-green-600 p-4 py-8">
       <div className="max-w-3xl mx-auto">
         {/* Cabeçalho */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-white mb-2">🛒 Carrinho de Compras</h1>
-          <p className="text-green-100">
-            {estabelecimento?.nome_estabelecimento || estabelecimentoNome}
-          </p>
         </div>
 
         {/* Itens do Carrinho */}
@@ -214,15 +211,6 @@ export default function CarrinhoPage() {
                       🗑️ Remover
                     </button>
                   </div>
-                </div>
-
-                <div className="text-right">
-                  <p className="font-bold text-gray-800">
-                    {(item.preco * item.quantidade).toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    })}
-                  </p>
                 </div>
               </div>
             ))}
