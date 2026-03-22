@@ -48,7 +48,10 @@ export default function Mapa() {
 
     try {
       await api.finalizarPedido(pedidoAtivo.id);
-      alert('Entrega finalizada com sucesso!');
+      
+      const subtotal = ((parseFloat(String(pedidoAtivo.valor_pedido)) || 0) + (parseFloat(String(pedidoAtivo.valor_entregador)) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      alert(`✅ Entrega finalizada com sucesso!\n\n💵 Receber do cliente: ${subtotal}`);
+      
       router.push('/pedidos');
     } catch (error) {
       console.error('Erro ao finalizar entrega:', error);
@@ -131,6 +134,12 @@ export default function Mapa() {
                     }`}>
                       {pedidoAtivo.status === 'em_transito' ? '🚗 Em trânsito' : '✅ Aceito'}
                     </span>
+                  </div>
+                  <div className="bg-blue-50 rounded p-2 border border-blue-100 mt-3 flex justify-between items-center">
+                    <p className="text-xs font-medium text-blue-800 flex items-center gap-1">💵 Subtotal a Receber:</p>
+                    <p className="text-sm text-blue-900 font-bold">
+                      {((parseFloat(String(pedidoAtivo.valor_pedido).replace(',', '.')) || 0) + (parseFloat(String(pedidoAtivo.valor_entregador).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
                   </div>
                 </div>
 

@@ -256,15 +256,16 @@ export default function Pedidos() {
     }
   };
 
-  const handleFinalizarEntrega = async (pedidoId: string) => {
+  const handleFinalizarEntrega = async (pedido: Pedido) => {
     try {
-      await api.finalizarPedido(pedidoId);
+      await api.finalizarPedido(pedido.id);
       
       setMeusPedidos((prev) =>
-        prev.map((p) => (p.id === pedidoId ? { ...p, status: 'entregue' } : p))
+        prev.map((p) => (p.id === pedido.id ? { ...p, status: 'entregue' } : p))
       );
       
-      alert('Entrega finalizada com sucesso!');
+      const subtotal = ((parseFloat(String(pedido.valor_pedido).replace(',', '.')) || 0) + (parseFloat(String(pedido.valor_entregador).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      alert(`✅ Entrega finalizada com sucesso!\n\n💵 Receber do cliente: ${subtotal}`);
     } catch (error) {
       console.error('Erro ao finalizar entrega:', error);
       alert('Erro ao finalizar entrega');
@@ -360,7 +361,7 @@ export default function Pedidos() {
                   key={pedido.id}
                   pedido={pedido}
                   onIniciar={() => handleIniciarEntrega(pedido.id)}
-                  onFinalizar={() => handleFinalizarEntrega(pedido.id)}
+                  onFinalizar={() => handleFinalizarEntrega(pedido)}
                   mostrarAcoes
                 />
               ))}

@@ -757,6 +757,14 @@ export default function Estabelecimento() {
                 </div>
               </div>
 
+              {/* Subtotal */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex justify-between items-center mt-2">
+                <span className="font-bold text-blue-800">💵 Subtotal do Pedido:</span>
+                <span className="text-2xl font-black text-blue-900">
+                  {((parseFloat(valorPedido || '0') || 0) + (parseFloat(valorEntregador || '0') || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -878,14 +886,21 @@ export default function Estabelecimento() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
-                      <div className="bg-green-50 rounded p-2 border border-green-100">
-                        <p className="text-xs font-medium text-green-700 mb-1">💰 Valor do Pedido:</p>
-                        <p className="text-sm text-green-900 font-bold">{formatarValor(pedido.valor_pedido)}</p>
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                        <p className="text-xs font-medium text-green-700 uppercase mb-1">Valor do Pedido</p>
+                        <p className="text-lg font-bold text-green-900">{formatarValor(pedido.valor_pedido)}</p>
                       </div>
-                      <div className="bg-purple-50 rounded p-2 border border-purple-100">
-                        <p className="text-xs font-medium text-purple-700 mb-1">🛵 Valor do Entregador:</p>
-                        <p className="text-sm text-purple-900 font-bold">{formatarValor(pedido.valor_entregador)}</p>
+                      <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                        <p className="text-xs font-medium text-purple-700 uppercase mb-1">Taxa de Entrega</p>
+                        <p className="text-lg font-bold text-purple-900">{formatarValor(pedido.valor_entregador)}</p>
                       </div>
+                    </div>
+                    
+                    <div className="mt-3 bg-blue-50 p-3 rounded-lg border border-blue-200 flex justify-between items-center">
+                      <p className="text-sm font-bold text-blue-800">💵 Subtotal do Cliente:</p>
+                      <p className="text-xl font-black text-blue-900">
+                        {formatarValor((parseFloat(String(pedido.valor_pedido).replace(',', '.')) || 0) + (parseFloat(String(pedido.valor_entregador).replace(',', '.')) || 0))}
+                      </p>
                     </div>
 
                     {pedido.entregadorId && pedido.entregadorNome && (

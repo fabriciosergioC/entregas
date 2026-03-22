@@ -87,6 +87,13 @@ export default function PedidoCard({
           </div>
         </div>
 
+        <div className="bg-blue-50 rounded p-2 border border-blue-100 mt-2 flex justify-between items-center">
+          <p className="text-xs font-medium text-blue-800 flex items-center gap-1">💵 Subtotal a Receber:</p>
+          <p className="text-sm text-blue-900 font-bold">
+            {formatarValor((parseFloat(String(pedido.valor_pedido).replace(',', '.')) || 0) + (parseFloat(String(pedido.valor_entregador).replace(',', '.')) || 0))}
+          </p>
+        </div>
+
         <div className="flex items-center gap-2">
           <span className="text-gray-500">🕐</span>
           <p className="text-gray-600 text-sm">
