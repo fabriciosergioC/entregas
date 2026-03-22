@@ -16,8 +16,6 @@ const nextConfig = {
       },
     ],
   },
-  // Configuração para Netlify
-  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
