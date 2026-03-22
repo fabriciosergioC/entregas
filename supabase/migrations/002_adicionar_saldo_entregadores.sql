@@ -61,34 +61,50 @@ BEGIN
   -- Quando pedido é finalizado (entregue)
   IF NEW.status = 'entregue' AND OLD.status != 'entregue' THEN
     -- Buscar dados do pedido
-    SELECT valor_entregador INTO pedido_record
+    SELECT valor_entregador, forma_pagamento INTO pedido_record
     FROM pedidos
     WHERE id = NEW.id;
-    
-    -- Se tiver valor_entregador, usar esse valor
-    IF pedido_record.valor_entregador IS NOT NULL THEN
-      valor_entrega := CAST(pedido_record.valor_entregador AS DECIMAL(10,2));
+
+    -- Verificar forma de pagamento
+    -- Somente adiciona ao saldo se NÃO for dinheiro
+    IF LOWER(COALESCE(pedido_record.forma_pagamento, '')) != 'dinheiro' THEN
+      -- Se tiver valor_entregador, usar esse valor
+      IF pedido_record.valor_entregador IS NOT NULL THEN
+        valor_entrega := CAST(pedido_record.valor_entregador AS DECIMAL(10,2));
+      ELSE
+        -- Caso contrário, usar valor 0
+        valor_entrega := 0;
+      END IF;
+
+      -- Atualizar saldo do entregador
+      UPDATE entregadores
+      SET saldo = saldo + valor_entrega
+      WHERE id = NEW.entregador_id;
+
+      -- Registrar no extrato
+      INSERT INTO extratos (entregador_id, pedido_id, tipo, valor, descricao)
+      VALUES (
+        NEW.entregador_id,
+        NEW.id,
+        'credito',
+        valor_entrega,
+        'Entrega finalizada - Pedido ' || SUBSTRING(NEW.id::text FROM 1 FOR 8) || 
+        ' (' || INITCAP(pedido_record.forma_pagamento) || ')'
+      );
     ELSE
-      -- Caso contrário, usar valor do pedido como referência
-      valor_entrega := 0;
+      -- Registrar no extrato que foi pagamento em dinheiro (não acumula saldo)
+      INSERT INTO extratos (entregador_id, pedido_id, tipo, valor, descricao)
+      VALUES (
+        NEW.entregador_id,
+        NEW.id,
+        'credito',
+        0,
+        'Entrega finalizada - Pedido ' || SUBSTRING(NEW.id::text FROM 1 FOR 8) || 
+        ' (Dinheiro - não acumula saldo)'
+      );
     END IF;
-    
-    -- Atualizar saldo do entregador
-    UPDATE entregadores
-    SET saldo = saldo + valor_entrega
-    WHERE id = NEW.entregador_id;
-    
-    -- Registrar no extrato
-    INSERT INTO extratos (entregador_id, pedido_id, tipo, valor, descricao)
-    VALUES (
-      NEW.entregador_id,
-      NEW.id,
-      'credito',
-      valor_entrega,
-      'Entrega finalizada - Pedido ' || SUBSTRING(NEW.id::text FROM 1 FOR 8)
-    );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
