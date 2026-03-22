@@ -12,6 +12,7 @@ interface Estabelecimento {
   email: string;
   telefone: string;
   cnpj?: string;
+  contato_estabelecimento?: string;
   ativo: boolean;
 }
 

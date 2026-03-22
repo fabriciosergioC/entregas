@@ -1,6 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import { useCarrinho } from '@/contexts/CarrinhoContext';
 
 interface Estabelecimento {
   id: string;
@@ -9,14 +12,71 @@ interface Estabelecimento {
   email: string;
   telefone: string;
   cnpj?: string;
+  contato_estabelecimento?: string;
+}
+
+interface Produto {
+  id: string;
+  nome: string;
+  descricao?: string;
+  preco: number;
+  categoria?: string;
+  imagem_url?: string;
+  disponivel: boolean;
 }
 
 interface EstabelecimentoCardProps {
   estabelecimento: Estabelecimento;
 }
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 export default function EstabelecimentoCard({ estabelecimento }: EstabelecimentoCardProps) {
+  const router = useRouter();
+  const { adicionarItem, itens, estabelecimentoId, limparCarrinho } = useCarrinho();
   const [mostrarContato, setMostrarContato] = useState(false);
+  const [mostrarProdutos, setMostrarProdutos] = useState(false);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [loadingProdutos, setLoadingProdutos] = useState(false);
+
+  // Verificar se há itens no carrinho deste estabelecimento
+  const itensNoCarrinho = estabelecimentoId === estabelecimento.id
+    ? itens.filter(item => item.estabelecimento_id === estabelecimento.id).length
+    : 0;
+
+  // Carregar produtos do estabelecimento
+  useEffect(() => {
+    if (mostrarProdutos) {
+      carregarProdutos();
+    }
+  }, [mostrarProdutos]);
+
+  const carregarProdutos = async () => {
+    try {
+      setLoadingProdutos(true);
+      const { data, error } = await supabase
+        .from('produtos')
+        .select('*')
+        .eq('estabelecimento_id', estabelecimento.id)
+        .eq('disponivel', true)
+        .order('nome', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar produtos:', error);
+        return;
+      }
+
+      if (data) {
+        setProdutos(data);
+      }
+    } catch (err) {
+      console.error('Erro inesperado:', err);
+    } finally {
+      setLoadingProdutos(false);
+    }
+  };
 
   const handleWhatsApp = () => {
     if (!estabelecimento.telefone) return;
@@ -40,6 +100,24 @@ export default function EstabelecimentoCard({ estabelecimento }: Estabelecimento
 
   const handleTelefone = () => {
     window.location.href = `tel:${estabelecimento.telefone}`;
+  };
+
+  const handleAdicionarAoCarrinho = (produto: Produto) => {
+    // Verificar se já há itens de outro estabelecimento no carrinho
+    if (estabelecimentoId && estabelecimentoId !== estabelecimento.id) {
+      if (confirm('Seu carrinho contém itens de outro estabelecimento. Deseja limpar o carrinho e continuar?')) {
+        limparCarrinho();
+        adicionarItem(produto);
+      }
+      return;
+    }
+
+    adicionarItem(produto);
+    alert(`✅ ${produto.nome} adicionado ao carrinho!`);
+  };
+
+  const handleIrAoCarrinho = () => {
+    router.push('/painel-cliente/carrinho');
   };
 
   return (
@@ -81,16 +159,44 @@ export default function EstabelecimentoCard({ estabelecimento }: Estabelecimento
             <span>CNPJ: {estabelecimento.cnpj}</span>
           </div>
         )}
+
+        {estabelecimento.contato_estabelecimento && (
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="text-lg">📞</span>
+            <span>{estabelecimento.contato_estabelecimento}</span>
+          </div>
+        )}
       </div>
 
       {/* Botão de Contato */}
-      <button
-        onClick={() => setMostrarContato(!mostrarContato)}
-        className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-      >
-        <span>📞</span>
-        {mostrarContato ? 'Ocultar Contatos' : 'Ver Contatos'}
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setMostrarContato(!mostrarContato)}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <span>📞</span>
+          {mostrarContato ? 'Ocultar Contatos' : 'Ver Contatos'}
+        </button>
+
+        <button
+          onClick={() => setMostrarProdutos(!mostrarProdutos)}
+          className="bg-green-100 hover:bg-green-200 text-green-700 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <span>🛍️</span>
+          {mostrarProdutos ? 'Ocultar Produtos' : 'Ver Produtos'}
+        </button>
+      </div>
+
+      {/* Botão Ir ao Carrinho */}
+      {itensNoCarrinho > 0 && (
+        <button
+          onClick={handleIrAoCarrinho}
+          className="w-full mt-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md"
+        >
+          <span>🛒</span>
+          Ver Carrinho ({itensNoCarrinho} {itensNoCarrinho === 1 ? 'item' : 'itens'})
+        </button>
+      )}
 
       {/* Opções de Contato */}
       {mostrarContato && estabelecimento.telefone && (
@@ -99,7 +205,7 @@ export default function EstabelecimentoCard({ estabelecimento }: Estabelecimento
             <p className="text-xs font-semibold text-gray-500 mb-3 text-center">
               ENTRE EM CONTATO
             </p>
-            
+
             <div className="grid grid-cols-3 gap-2">
               {/* WhatsApp */}
               <button
@@ -128,6 +234,77 @@ export default function EstabelecimentoCard({ estabelecimento }: Estabelecimento
                 <span>Email</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Produtos */}
+      {mostrarProdutos && (
+        <div className="mt-4 animate-fadeIn">
+          <div className="border-t border-gray-200 pt-4">
+            <p className="text-xs font-semibold text-gray-500 mb-3 text-center">
+              PRODUTOS DISPONÍVEIS
+            </p>
+
+            {loadingProdutos ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex gap-3 p-2 bg-gray-50 rounded animate-pulse">
+                    <div className="w-16 h-16 bg-gray-300 rounded"></div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : produtos.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {produtos.map((produto) => (
+                  <div
+                    key={produto.id}
+                    className="flex gap-3 p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors border border-gray-100"
+                  >
+                    {produto.imagem_url ? (
+                      <img
+                        src={produto.imagem_url}
+                        alt={produto.nome}
+                        className="w-16 h-16 object-cover rounded-lg flex-shrink-0 border border-gray-200"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0 border border-gray-200">
+                        <span className="text-2xl">📦</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-medium text-gray-800 text-sm truncate">{produto.nome}</h4>
+                        {produto.descricao && (
+                          <p className="text-xs text-gray-500 truncate">{produto.descricao}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-green-600 font-bold text-sm">
+                          {produto.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                        <button
+                          onClick={() => handleAdicionarAoCarrinho(produto)}
+                          className="bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-3 rounded-lg text-xs transition-colors flex items-center gap-1"
+                        >
+                          <span>➕</span>
+                          Adicionar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-gray-500 text-sm">
+                <span className="text-4xl block mb-2">📦</span>
+                Nenhum produto cadastrado ainda
+              </div>
+            )}
           </div>
         </div>
       )}

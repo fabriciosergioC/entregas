@@ -230,7 +230,22 @@ export const pedidosApi = {
 
   // Iniciar entrega
   async iniciarEntrega(pedidoId: string) {
-    const { data, error } = await supabase
+    // Buscar dados do pedido
+    const { data: pedido, error: erroPedido } = await supabase
+      .from('pedidos')
+      .select('*')
+      .eq('id', pedidoId)
+      .single();
+
+    if (erroPedido) {
+      console.error('Erro ao buscar pedido:', erroPedido);
+      return { data: null, error: erroPedido };
+    }
+
+    console.log('📦 Pedido encontrado:', pedido);
+
+    // Atualizar status do pedido para em_transito
+    const { data: pedidoAtualizado, error: erroAtualizacao } = await supabase
       .from('pedidos')
       .update({
         status: 'em_transito',
@@ -240,7 +255,48 @@ export const pedidosApi = {
       .select()
       .single();
 
-    return { data, error };
+    if (erroAtualizacao) {
+      console.error('Erro ao atualizar pedido:', erroAtualizacao);
+      return { data: null, error: erroAtualizacao };
+    }
+
+    console.log('✅ Pedido atualizado para em_transito');
+
+    // Atualizar fila de pedidos para em_rota buscando pelo cliente e endereço (já que pedido_id não existe na tabela)
+    const { data: filaEncontrada, error: erroBuscaFila } = await supabase
+      .from('fila_pedidos')
+      .select('*')
+      .eq('cliente', pedido.cliente)
+      .eq('endereco', pedido.endereco)
+      .eq('status', 'em_preparacao')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (erroBuscaFila) {
+      console.error('Erro ao buscar fila:', erroBuscaFila);
+    }
+
+    console.log('🔍 Fila encontrada:', filaEncontrada);
+
+    if (filaEncontrada) {
+      const { error: erroFila } = await supabase
+        .from('fila_pedidos')
+        .update({
+          status: 'em_rota',
+        })
+        .eq('id', filaEncontrada.id);
+
+      if (erroFila) {
+        console.error('Erro ao atualizar fila:', erroFila);
+      } else {
+        console.log('✅ Fila atualizada para em_rota');
+      }
+    } else {
+      console.log('⚠️ Nenhum registro na fila encontrado para este pedido');
+    }
+
+    return { data: pedidoAtualizado, error: null };
   },
 
   // Finalizar pedido

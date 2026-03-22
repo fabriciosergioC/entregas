@@ -2,13 +2,18 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { api } from '@/services/api';
+import { createClient } from '@supabase/supabase-js';
 import '@/app/globals.css';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Pedido {
   id: string;
   cliente: string;
   endereco: string;
-  itens: string[];
+  itens: string[] | string;
   status: 'pendente' | 'aceito' | 'em_transito' | 'entregue';
   entregador_id?: string | null;
   entregadorId?: string;
@@ -20,6 +25,27 @@ interface Pedido {
   valor_entregador?: number | null;
   liberado_pelo_estabelecimento?: boolean;
   liberado_em?: string | null;
+  created_at: string;
+  createdAt: Date;
+  telefone_cliente?: string;
+  forma_pagamento?: string;
+  observacoes?: string;
+}
+
+interface FilaPedido {
+  id: string;
+  cliente: string;
+  telefone_cliente: string;
+  endereco: string;
+  forma_pagamento?: string;
+  observacoes?: string;
+  itens: string[];
+  status: string;
+  estabelecimento_nome?: string;
+  estabelecimento_id?: string;
+  criado_por?: string;
+  convertido_em?: string;
+  pedido_id?: string;
   created_at: string;
   createdAt: Date;
 }
@@ -44,6 +70,9 @@ export default function Estabelecimento() {
   const [linkCopiado, setLinkCopiado] = useState<string | null>(null);
   const [ultimoPedidoCriado, setUltimoPedidoCriado] = useState<string | null>(null);
   const [usuarioLogado, setUsuarioLogado] = useState<{ id: string; email: string; nome_estabelecimento?: string } | null>(null);
+  const [mostrarFilaPedidos, setMostrarFilaPedidos] = useState(false);
+  const [filaPedidos, setFilaPedidos] = useState<FilaPedido[]>([]);
+  const [estabelecimentoId, setEstabelecimentoId] = useState<string | null>(null);
 
   // Verificar se usuário está logado
   useEffect(() => {
@@ -54,7 +83,8 @@ export default function Estabelecimento() {
     }
     const userData = JSON.parse(user);
     setUsuarioLogado(userData);
-    
+    setEstabelecimentoId(userData.id);
+
     // Carregar nome do estabelecimento
     const nomeSalvo = localStorage.getItem('nome_estabelecimento') || userData.nome_estabelecimento;
     if (nomeSalvo) {
@@ -153,13 +183,16 @@ export default function Estabelecimento() {
     if (enderecoSalvo) setEnderecoEstabelecimento(enderecoSalvo);
 
     carregarPedidos();
+    carregarFilaPedidos();
 
     // Atualizar lista periodicamente
     const intervalo = setInterval(carregarPedidos, 5000);
+    const intervaloFila = setInterval(carregarFilaPedidos, 5000);
     return () => {
       clearInterval(intervalo);
+      clearInterval(intervaloFila);
     };
-  }, []);
+  }, [estabelecimentoId]);
 
   const carregarPedidos = async () => {
     try {
@@ -167,16 +200,26 @@ export default function Estabelecimento() {
       const data = resultado.data || [];
 
       if (Array.isArray(data)) {
+        // Filtrar apenas pedidos que NÃO vieram da fila de clientes (criados manualmente pelo estabelecimento)
+        // Pedidos da fila têm estabelecimento_nome E foram criados via carrinho
+        const pedidosFiltrados = data.filter(pedido => {
+          // Mostra pedidos criados manualmente (sem estabelecimento_nome ou sem telefone_cliente)
+          return !pedido.telefone_cliente;
+        });
+
         // Normalizar dados dos pedidos
-        const pedidosNormalizados = data.map(pedido => ({
+        const pedidosNormalizados = pedidosFiltrados.map(pedido => ({
           ...pedido,
           entregadorId: pedido.entregador_id || pedido.entregadorId,
           entregadorNome: (pedido as any).entregador?.nome || pedido.entregadorNome,
           entregadorTelefone: (pedido as any).entregador?.telefone || pedido.entregadorTelefone,
           createdAt: pedido.created_at ? new Date(pedido.created_at) : new Date(),
-          liberado_pelo_estabelecimento: pedido.liberado_pelo_estabelecimento || false
+          liberado_pelo_estabelecimento: pedido.liberado_pelo_estabelecimento || false,
+          telefone_cliente: pedido.telefone_cliente || '',
+          forma_pagamento: pedido.forma_pagamento || '',
+          observacoes: pedido.observacoes || ''
         }));
-        
+
         setPedidos([...pedidosNormalizados].reverse()); // Mais recentes primeiro
         setStatusConexao('online');
       } else {
@@ -188,6 +231,104 @@ export default function Estabelecimento() {
       console.error('Erro ao carregar pedidos:', error);
       setPedidos([]);
       setStatusConexao('offline');
+    }
+  };
+
+  // Carregar pedidos da fila (tabela separada)
+  const carregarFilaPedidos = async () => {
+    try {
+      // Se não tiver estabelecimento_id, não carrega
+      if (!estabelecimentoId) {
+        console.log('⚠️ Sem estabelecimento_id para filtrar fila');
+        setFilaPedidos([]);
+        return;
+      }
+
+      console.log('🔍 Buscando fila de pedidos para estabelecimento_id:', estabelecimentoId);
+
+      const { data, error } = await supabase
+        .from('fila_pedidos')
+        .select('*')
+        .eq('estabelecimento_id', estabelecimentoId)
+        .in('status', ['pendente', 'em_preparacao', 'em_rota'])
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erro ao carregar fila de pedidos:', error);
+        setFilaPedidos([]);
+        return;
+      }
+
+      console.log('✅ Fila carregada:', data?.length || 0, 'pedidos');
+      if (data && data.length > 0) {
+        console.log('📋 Primeiro pedido:', data[0]);
+      }
+
+      if (data) {
+        const filaNormalizada = data.map(pedido => ({
+          ...pedido,
+          createdAt: pedido.created_at ? new Date(pedido.created_at) : new Date(),
+        }));
+        setFilaPedidos(filaNormalizada);
+      } else {
+        setFilaPedidos([]);
+      }
+    } catch (err) {
+      console.error('❌ Erro inesperado ao carregar fila:', err);
+      setFilaPedidos([]);
+    }
+  };
+
+  // Aceitar pedido da fila (mudar status para em_preparacao e criar pedido)
+  const aceitarPedidoFila = async (filaPedido: FilaPedido) => {
+    try {
+      // O pedido não é mais enviado automaticamente para o painel de pedidos do entregador
+      console.log('Pedido aceito na fila. Não será enviado para a tabela de pedidos.');
+
+      // Atualizar fila mudando status para em_preparacao
+      const { error: erroUpdate } = await supabase
+        .from('fila_pedidos')
+        .update({ 
+          status: 'em_preparacao',
+          convertido_em: new Date().toISOString()
+        })
+        .eq('id', filaPedido.id);
+
+      if (erroUpdate) {
+        console.error('Erro ao atualizar fila_pedidos:', erroUpdate);
+        alert('Erro ao atualizar o status na fila: ' + erroUpdate.message);
+        return;
+      }
+
+      alert(`✅ Pedido aceito!\n\nO pedido de ${filaPedido.cliente} está em preparação.`);
+
+      // Recarregar listas
+      carregarPedidos();
+      carregarFilaPedidos();
+    } catch (err) {
+      console.error('Erro ao aceitar pedido:', err);
+      alert('Erro ao aceitar pedido!');
+    }
+  };
+
+  // Atualizar status de um pedido na fila (manual)
+  const atualizarStatusFila = async (id: string, novoStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('fila_pedidos')
+        .update({ status: novoStatus })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Erro ao atualizar status:', error);
+        alert('Erro ao atualizar status: ' + error.message);
+        return;
+      }
+
+      carregarFilaPedidos();
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+      alert('Erro inesperado ao atualizar status');
     }
   };
 
@@ -353,8 +494,58 @@ export default function Estabelecimento() {
       </Head>
 
       <div className="min-h-screen bg-gray-50">
+        {/* Sidebar */}
+        <aside className="fixed left-0 top-0 h-full w-64 bg-white shadow-lg z-40 hidden lg:block">
+          <div className="p-4">
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <span className="text-2xl">🏪</span>
+              Menu
+            </h2>
+            <nav className="space-y-2">
+              <button
+                onClick={() => setMostrarFilaPedidos(false)}
+                className={`w-full font-medium py-3 px-4 rounded-lg transition-all flex items-center gap-3 text-left ${
+                  !mostrarFilaPedidos
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                <span className="text-xl">📋</span>
+                Pedidos
+              </button>
+              <button
+                onClick={() => setMostrarFilaPedidos(true)}
+                className={`w-full font-medium py-3 px-4 rounded-lg transition-all flex items-center gap-3 text-left relative ${
+                  mostrarFilaPedidos
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                <span className="text-xl">⏳</span>
+                Fila de Pedidos
+                {filaPedidos.filter(p => p.status === 'pendente').length > 0 && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {filaPedidos.filter(p => p.status === 'pendente').length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => router.push('/cadastro-produto')}
+                className={`w-full font-medium py-3 px-4 rounded-lg transition-all flex items-center gap-3 text-left ${
+                  router.pathname === '/cadastro-produto'
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                <span className="text-xl">🛍️</span>
+                Cadastrar Produtos
+              </button>
+            </nav>
+          </div>
+        </aside>
+
         {/* Header */}
-        <header className="bg-blue-600 text-white p-4 shadow-md">
+        <header className="bg-blue-600 text-white p-4 shadow-md lg:ml-64">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-xl font-bold">🏪 {usuarioLogado?.nome_estabelecimento || 'Painel do Estabelecimento'}</h1>
@@ -379,7 +570,7 @@ export default function Estabelecimento() {
           </div>
         </header>
 
-        <main className="p-4 max-w-4xl mx-auto">
+        <main className="p-4 max-w-4xl mx-auto lg:ml-64">
           {/* Banner do Último Pedido Criado */}
           {ultimoPedidoCriado && (
             <section className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 mb-6 text-white">
@@ -423,13 +614,14 @@ export default function Estabelecimento() {
           )}
 
           {/* Formulário de Novo Pedido */}
-          <section className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <span className="text-2xl">📝</span>
-              Criar Novo Pedido
-            </h2>
+          {!mostrarFilaPedidos && (
+            <section className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="text-2xl">📝</span>
+                Criar Novo Pedido
+              </h2>
 
-            <form onSubmit={handleCriarPedido} className="space-y-4">
+              <form onSubmit={handleCriarPedido} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nome do Estabelecimento
@@ -536,15 +728,17 @@ export default function Estabelecimento() {
                 {loading ? 'Enviando...' : '📦 Criar Pedido e Enviar para Entregadores'}
               </button>
             </form>
-          </section>
+            </section>
+          )}
 
           {/* Lista de Pedidos */}
-          <section className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <span className="text-2xl">📋</span>
-              Pedidos
-              <span className="text-sm font-normal text-gray-500">({pedidosFiltrados.length})</span>
-            </h2>
+          {!mostrarFilaPedidos && (
+            <section className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="text-2xl">📋</span>
+                Pedidos
+                <span className="text-sm font-normal text-gray-500">({pedidosFiltrados.length})</span>
+              </h2>
 
             {/* Filtros */}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
@@ -738,7 +932,348 @@ export default function Estabelecimento() {
                 ))}
               </div>
             )}
-          </section>
+            </section>
+          )}
+
+          {/* Fila de Pedidos - Pedidos do Cliente (Tabela Separada) */}
+          {mostrarFilaPedidos && (
+            <section className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <span className="text-2xl">⏳</span>
+                  Fila de Pedidos - Clientes
+                </h2>
+                <span className="text-sm font-medium text-gray-500">
+                  {filaPedidos.length} pedido(s) | {filaPedidos.filter(p => p.status === 'pendente').length} novos | {filaPedidos.filter(p => p.status === 'em_preparacao').length} em preparação | {filaPedidos.filter(p => p.status === 'em_rota').length} em rota
+                </span>
+              </div>
+
+              {/* Pedidos Pendentes (Novos) */}
+              <h3 className="text-md font-bold text-red-800 mb-3 flex items-center gap-2">
+                <span className="text-xl">🚨</span>
+                Novos Pedidos (Pendentes)
+                <span className="text-sm font-normal text-gray-500">
+                  ({filaPedidos.filter(p => p.status === 'pendente').length})
+                </span>
+              </h3>
+
+              {filaPedidos.filter(p => p.status === 'pendente').length > 0 && (
+                <div className="space-y-3 mb-6">
+                  {filaPedidos
+                    .filter(p => p.status === 'pendente')
+                    .map((pedido) => (
+                    <div
+                      key={pedido.id}
+                      className="border-2 border-red-300 bg-red-50 rounded-lg p-4 shadow-md"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-bold text-gray-800 text-lg">
+                            👤 {pedido.cliente}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {new Date(pedido.createdAt).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-200 text-red-800 uppercase animate-pulse">
+                          Aguardando Aceite
+                        </span>
+                      </div>
+
+                      {/* Dados de Entrega */}
+                      <div className="space-y-3 mb-4">
+                        {/* Itens do Pedido */}
+                        <div className="bg-white rounded p-3 border border-red-100">
+                          <p className="text-xs font-bold text-red-700 mb-2">📦 ITENS DO PEDIDO:</p>
+                          <ul className="space-y-1">
+                            {Array.isArray(pedido.itens) ? (
+                              pedido.itens.map((item, index) => (
+                                <li key={index} className="text-sm text-gray-800 font-medium flex items-start gap-2">
+                                  <span className="text-red-500">•</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))
+                            ) : (
+                              <li className="text-sm text-gray-800 font-medium">{pedido.itens}</li>
+                            )}
+                          </ul>
+                        </div>
+
+                        {/* Telefone */}
+                        {pedido.telefone_cliente && (
+                          <div className="bg-white rounded p-2 border border-red-100">
+                            <p className="text-xs font-medium text-red-700 mb-1">📞 Telefone/WhatsApp:</p>
+                            <p className="text-sm text-gray-800">{pedido.telefone_cliente}</p>
+                          </div>
+                        )}
+
+                        {/* Endereço */}
+                        {pedido.endereco && (
+                          <div className="bg-white rounded p-2 border border-red-100">
+                            <p className="text-xs font-medium text-red-700 mb-1">📍 Endereço de Entrega:</p>
+                            <p className="text-sm text-gray-800">{pedido.endereco}</p>
+                          </div>
+                        )}
+
+                        {/* Forma de Pagamento */}
+                        {pedido.forma_pagamento && (
+                          <div className="bg-white rounded p-2 border border-red-100">
+                            <p className="text-xs font-medium text-red-700 mb-1">💳 Forma de Pagamento:</p>
+                            <p className="text-sm text-gray-800">
+                              {pedido.forma_pagamento === 'pix' && '💠 PIX'}
+                              {pedido.forma_pagamento === 'dinheiro' && '💵 Dinheiro'}
+                              {pedido.forma_pagamento === 'cartao_credito' && '💳 Cartão de Crédito'}
+                              {pedido.forma_pagamento === 'cartao_debito' && '💳 Cartão de Débito'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Observações */}
+                        {pedido.observacoes && (
+                          <div className="bg-white rounded p-2 border border-red-100">
+                            <p className="text-xs font-medium text-red-700 mb-1">📝 Observações:</p>
+                            <p className="text-sm text-gray-800 font-medium bg-yellow-50">{pedido.observacoes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => aceitarPedidoFila(pedido)}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-md flex items-center justify-center gap-2"
+                      >
+                        ✅ ACEITAR PEDIDO E INICIAR PREPARAÇÃO
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pedidos em Preparação */}
+              <h3 className="text-md font-bold text-orange-800 mb-3 flex items-center gap-2">
+                <span className="text-xl">🔥</span>
+                Em Preparação
+                <span className="text-sm font-normal text-gray-500">
+                  ({filaPedidos.filter(p => p.status === 'em_preparacao').length})
+                </span>
+              </h3>
+
+              {filaPedidos.filter(p => p.status === 'em_preparacao').length === 0 ? (
+                <div className="text-center py-6 bg-gray-50 rounded-lg">
+                  <span className="text-4xl">📦</span>
+                  <p className="text-gray-500 mt-2 text-sm">
+                    Nenhum pedido em preparação
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filaPedidos
+                    .filter(p => p.status === 'em_preparacao')
+                    .map((pedido) => (
+                    <div
+                      key={pedido.id}
+                      className="border border-orange-200 bg-orange-50 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-bold text-gray-800 text-lg">
+                            👤 {pedido.cliente}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {new Date(pedido.createdAt).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-200 text-orange-800">
+                          🔥 Em Preparação
+                        </span>
+                      </div>
+
+                      {/* Dados de Entrega */}
+                      <div className="space-y-3">
+                        {/* Itens do Pedido */}
+                        <div className="bg-white rounded p-3 border border-orange-100">
+                          <p className="text-xs font-bold text-orange-700 mb-2">📦 SEUS ITENS:</p>
+                          <ul className="space-y-1">
+                            {Array.isArray(pedido.itens) ? (
+                              pedido.itens.map((item, index) => (
+                                <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
+                                  <span className="text-orange-500">•</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))
+                            ) : (
+                              <li className="text-sm text-gray-700">{pedido.itens}</li>
+                            )}
+                          </ul>
+                        </div>
+
+                        {/* Telefone */}
+                        {pedido.telefone_cliente && (
+                          <div className="bg-white rounded p-2 border border-orange-100">
+                            <p className="text-xs font-medium text-orange-700 mb-1">📞 Telefone/WhatsApp:</p>
+                            <p className="text-sm text-gray-800">{pedido.telefone_cliente}</p>
+                          </div>
+                        )}
+
+                        {/* Endereço */}
+                        {pedido.endereco && (
+                          <div className="bg-white rounded p-2 border border-orange-100">
+                            <p className="text-xs font-medium text-orange-700 mb-1">📍 Endereço de Entrega:</p>
+                            <p className="text-sm text-gray-800">{pedido.endereco}</p>
+                          </div>
+                        )}
+
+                        {/* Forma de Pagamento */}
+                        {pedido.forma_pagamento && (
+                          <div className="bg-white rounded p-2 border border-orange-100">
+                            <p className="text-xs font-medium text-orange-700 mb-1">💳 Forma de Pagamento:</p>
+                            <p className="text-sm text-gray-800">
+                              {pedido.forma_pagamento === 'pix' && '💠 PIX'}
+                              {pedido.forma_pagamento === 'dinheiro' && '💵 Dinheiro'}
+                              {pedido.forma_pagamento === 'cartao_credito' && '💳 Cartão de Crédito'}
+                              {pedido.forma_pagamento === 'cartao_debito' && '💳 Cartão de Débito'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Observações */}
+                        {pedido.observacoes && (
+                          <div className="bg-white rounded p-2 border border-orange-100">
+                            <p className="text-xs font-medium text-orange-700 mb-1">📝 Observações:</p>
+                            <p className="text-sm text-gray-800">{pedido.observacoes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4">
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Atualizar Status:</label>
+                        <select
+                          value={pedido.status}
+                          onChange={(e) => atualizarStatusFila(pedido.id, e.target.value)}
+                          className="w-full bg-white border border-orange-300 text-orange-800 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block p-2.5 font-bold cursor-pointer hover:bg-orange-50 transition-colors"
+                        >
+                          <option value="em_preparacao">🔥 Em Preparação</option>
+                          <option value="em_rota">🚛 Em Rota de Entrega</option>
+                          <option value="entregue">✅ Entregue</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pedidos em Rota */}
+              <h3 className="text-md font-bold text-purple-800 mb-3 flex items-center gap-2">
+                <span className="text-xl">🚛</span>
+                Em Rota de Entrega
+                <span className="text-sm font-normal text-gray-500">
+                  ({filaPedidos.filter(p => p.status === 'em_rota').length})
+                </span>
+              </h3>
+
+              {filaPedidos.filter(p => p.status === 'em_rota').length === 0 ? (
+                <div className="text-center py-6 bg-gray-50 rounded-lg">
+                  <span className="text-4xl">📦</span>
+                  <p className="text-gray-500 mt-2 text-sm">
+                    Nenhum pedido em rota
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filaPedidos
+                    .filter(p => p.status === 'em_rota')
+                    .map((pedido) => (
+                    <div
+                      key={pedido.id}
+                      className="border border-purple-200 bg-purple-50 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-bold text-gray-800 text-lg">
+                            👤 {pedido.cliente}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {new Date(pedido.createdAt).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-200 text-purple-800">
+                          🚛 Em Rota
+                        </span>
+                      </div>
+
+                      {/* Dados de Entrega */}
+                      <div className="space-y-3">
+                        {/* Itens do Pedido */}
+                        <div className="bg-white rounded p-3 border border-purple-100">
+                          <p className="text-xs font-bold text-purple-700 mb-2">📦 SEUS ITENS:</p>
+                          <ul className="space-y-1">
+                            {Array.isArray(pedido.itens) ? (
+                              pedido.itens.map((item, index) => (
+                                <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
+                                  <span className="text-purple-500">•</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))
+                            ) : (
+                              <li className="text-sm text-gray-700">{pedido.itens}</li>
+                            )}
+                          </ul>
+                        </div>
+
+                        {/* Telefone */}
+                        {pedido.telefone_cliente && (
+                          <div className="bg-white rounded p-2 border border-purple-100">
+                            <p className="text-xs font-medium text-purple-700 mb-1">📞 Telefone/WhatsApp:</p>
+                            <p className="text-sm text-gray-800">{pedido.telefone_cliente}</p>
+                          </div>
+                        )}
+
+                        {/* Endereço */}
+                        {pedido.endereco && (
+                          <div className="bg-white rounded p-2 border border-purple-100">
+                            <p className="text-xs font-medium text-purple-700 mb-1">📍 Endereço de Entrega:</p>
+                            <p className="text-sm text-gray-800">{pedido.endereco}</p>
+                          </div>
+                        )}
+
+                        {/* Forma de Pagamento */}
+                        {pedido.forma_pagamento && (
+                          <div className="bg-white rounded p-2 border border-purple-100">
+                            <p className="text-xs font-medium text-purple-700 mb-1">💳 Forma de Pagamento:</p>
+                            <p className="text-sm text-gray-800">
+                              {pedido.forma_pagamento === 'pix' && '💠 PIX'}
+                              {pedido.forma_pagamento === 'dinheiro' && '💵 Dinheiro'}
+                              {pedido.forma_pagamento === 'cartao_credito' && '💳 Cartão de Crédito'}
+                              {pedido.forma_pagamento === 'cartao_debito' && '💳 Cartão de Débito'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Observações */}
+                        {pedido.observacoes && (
+                          <div className="bg-white rounded p-2 border border-purple-100">
+                            <p className="text-xs font-medium text-purple-700 mb-1">📝 Observações:</p>
+                            <p className="text-sm text-gray-800">{pedido.observacoes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4">
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Atualizar Status:</label>
+                        <select
+                          value={pedido.status}
+                          onChange={(e) => atualizarStatusFila(pedido.id, e.target.value)}
+                          className="w-full bg-white border border-purple-300 text-purple-800 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-2.5 font-bold cursor-pointer hover:bg-purple-50 transition-colors"
+                        >
+                          <option value="em_rota">🚛 Em Rota de Entrega</option>
+                          <option value="entregue">✅ Entregue</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </main>
       </div>
       </>

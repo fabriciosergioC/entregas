@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { CarrinhoProvider } from "@/contexts/CarrinhoContext";
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
+        <CarrinhoProvider>{children}</CarrinhoProvider>
       </body>
     </html>
   );

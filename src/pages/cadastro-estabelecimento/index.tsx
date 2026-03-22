@@ -18,6 +18,7 @@ export default function CadastroEstabelecimento() {
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState('');
   const [cnpj, setCnpj] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [contatoEstabelecimento, setContatoEstabelecimento] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
@@ -90,6 +91,7 @@ export default function CadastroEstabelecimento() {
             nome_responsavel: nome,
             telefone: telefone || '',
             cnpj: cnpj || '',
+            contato_estabelecimento: contatoEstabelecimento || '',
             ativo: true, // JÁ ATIVO! Sem confirmação necessária
           },
         ])
@@ -254,6 +256,26 @@ export default function CadastroEstabelecimento() {
                   required
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-700 font-semibold text-sm" htmlFor="contatoEstabelecimento">
+                Contato do Estabelecimento
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">📝</span>
+                <input
+                  id="contatoEstabelecimento"
+                  type="text"
+                  value={contatoEstabelecimento}
+                  onChange={(e) => setContatoEstabelecimento(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-50"
+                  placeholder="Ex: (00) 00000-0000 / contato@empresa.com"
+                />
+              </div>
+              <p className="text-xs text-gray-500 px-1">
+                Este contato será exibido no painel do cliente
+              </p>
             </div>
 
             <div className="space-y-1">
