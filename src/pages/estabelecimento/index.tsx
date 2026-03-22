@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { api } from '@/services/api';
 import { createClient } from '@supabase/supabase-js';
+import ModalPagamentoEntregador from '@/components/modalPagamentoEntregador/ModalPagamentoEntregador';
 import '@/app/globals.css';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -74,6 +75,9 @@ export default function Estabelecimento() {
   const [mostrarFilaPedidos, setMostrarFilaPedidos] = useState(false);
   const [filaPedidos, setFilaPedidos] = useState<FilaPedido[]>([]);
   const [estabelecimentoId, setEstabelecimentoId] = useState<string | null>(null);
+  const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false);
+  const [pagamentos, setPagamentos] = useState<any[]>([]);
+  const [carregandoPagamentos, setCarregandoPagamentos] = useState(false);
 
   // Verificar se usuário está logado
   useEffect(() => {
@@ -481,6 +485,30 @@ export default function Estabelecimento() {
     router.push('/login-estabelecimento');
   };
 
+  const carregarPagamentos = async () => {
+    if (!estabelecimentoId) return;
+    
+    setCarregandoPagamentos(true);
+    try {
+      const { data, error } = await supabase
+        .from('pagamentos_entregadores')
+        .select(`
+          *,
+          entregador:entregadores(nome, telefone)
+        `)
+        .eq('estabelecimento_id', estabelecimentoId)
+        .order('criado_em', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setPagamentos(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar pagamentos:', error);
+    } finally {
+      setCarregandoPagamentos(false);
+    }
+  };
+
   return (
     <>
       {!usuarioLogado ? (
@@ -566,6 +594,16 @@ export default function Estabelecimento() {
               <span className="text-xs">
                 {statusConexao === 'online' ? '✅ Online' : '❌ Offline'}
               </span>
+              <button
+                onClick={() => {
+                  carregarPagamentos();
+                  setModalPagamentoAberto(true);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center gap-2 text-sm"
+                title="Pagar entregadores"
+              >
+                💰 Pagamentos
+              </button>
               <button
                 onClick={handleLogout}
                 className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center gap-2 text-sm"
@@ -1348,6 +1386,100 @@ export default function Estabelecimento() {
             </section>
           )}
         </main>
+
+        {/* Histórico de Pagamentos */}
+        <section className="lg:ml-64 p-4">
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                💰 Histórico de Pagamentos
+              </h2>
+              <button
+                onClick={carregarPagamentos}
+                className="text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center gap-1"
+              >
+                🔄 Atualizar
+              </button>
+            </div>
+
+            {carregandoPagamentos ? (
+              <div className="text-center py-8">
+                <div className="animate-spin text-4xl mb-2">🔄</div>
+                <p className="text-gray-500">Carregando pagamentos...</p>
+              </div>
+            ) : pagamentos.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                <span className="text-5xl">📭</span>
+                <p className="text-gray-500 mt-4">Nenhum pagamento registrado</p>
+                <p className="text-gray-400 text-sm mt-2">
+                  Os pagamentos realizados aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-purple-50">
+                    <tr>
+                      <th className="text-left text-xs font-bold text-purple-700 uppercase py-3 px-4">Data</th>
+                      <th className="text-left text-xs font-bold text-purple-700 uppercase py-3 px-4">Entregador</th>
+                      <th className="text-left text-xs font-bold text-purple-700 uppercase py-3 px-4">Forma</th>
+                      <th className="text-left text-xs font-bold text-purple-700 uppercase py-3 px-4">Descrição</th>
+                      <th className="text-right text-xs font-bold text-purple-700 uppercase py-3 px-4">Valor</th>
+                      <th className="text-center text-xs font-bold text-purple-700 uppercase py-3 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagamentos.map((pagamento) => (
+                      <tr key={pagamento.id} className="border-t border-gray-100 hover:bg-purple-50 transition-colors">
+                        <td className="py-3 px-4 text-sm text-gray-700">
+                          {new Date(pagamento.criado_em).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          <div>
+                            <p className="font-medium text-gray-800">{pagamento.entregador?.nome}</p>
+                            <p className="text-xs text-gray-500">{pagamento.entregador?.telefone}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {pagamento.forma_pagamento === 'pix' && '💠 PIX'}
+                          {pagamento.forma_pagamento === 'dinheiro' && '💵 Dinheiro'}
+                          {pagamento.forma_pagamento === 'transferencia' && '🏦 Transferência'}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600 max-w-xs truncate">
+                          {pagamento.descricao || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-sm font-bold text-purple-600 text-right">
+                          {parseFloat(pagamento.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {pagamento.status === 'realizado' && (
+                            <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-medium">
+                              ✅ Realizado
+                            </span>
+                          )}
+                          {pagamento.status === 'cancelado' && (
+                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-medium">
+                              ❌ Cancelado
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Modal de Pagamento */}
+        <ModalPagamentoEntregador
+          aberto={modalPagamentoAberto}
+          onClose={() => setModalPagamentoAberto(false)}
+          onPagamentoRealizado={() => {
+            carregarPagamentos();
+          }}
+        />
       </div>
       </>
       )}
