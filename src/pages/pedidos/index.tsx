@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { api, Pedido } from '@/services/api';
 import { assinarPedidos, removerAssinaturaPedidos, assinarLiberacaoPedidos } from '@/services/realtime';
 import PedidoCard from '@/components/pedidoCard/PedidoCard';
+import ModalSaldo from '@/components/modalSaldo/ModalSaldo';
 import '@/app/globals.css';
 
 export default function Pedidos() {
@@ -13,6 +14,7 @@ export default function Pedidos() {
   const [meusPedidos, setMeusPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [tabAtiva, setTabAtiva] = useState<'disponiveis' | 'meus'>('disponiveis');
+  const [modalSaldoAberto, setModalSaldoAberto] = useState(false);
 
   // Função auxiliar para pegar o ID do entregador do localStorage
   const getEntregadorId = (): string | null => {
@@ -313,12 +315,21 @@ export default function Pedidos() {
               <h1 className="text-xl font-bold">🛵 App do Entregador</h1>
               {entregador && <p className="text-sm text-green-100">{entregador.nome}</p>}
             </div>
-            <button
-              onClick={handleLogout}
-              className="bg-green-700 hover:bg-green-800 px-3 py-2 rounded text-sm"
-            >
-              Sair
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModalSaldoAberto(true)}
+                className="bg-green-700 hover:bg-green-800 px-3 py-2 rounded text-sm font-medium flex items-center gap-1"
+                title="Ver saldo"
+              >
+                💰 Saldo
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-green-700 hover:bg-green-800 px-3 py-2 rounded text-sm"
+              >
+                Sair
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}
@@ -397,6 +408,15 @@ export default function Pedidos() {
           >
             🗺️
           </button>
+        )}
+
+        {/* Modal de Saldo */}
+        {entregador && (
+          <ModalSaldo
+            aberto={modalSaldoAberto}
+            entregadorId={entregador.id}
+            onClose={() => setModalSaldoAberto(false)}
+          />
         )}
       </div>
     </>
